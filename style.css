@@ -373,6 +373,23 @@ h3 {
   white-space: nowrap;
 }
 
+mjx-container {
+  max-width: 100%;
+}
+
+.inline-math mjx-container {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.math-callout mjx-container,
+.formula mjx-container {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
 .formula {
   width: min(520px, 100%);
   margin-top: 28px;

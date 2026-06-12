@@ -6,6 +6,19 @@
   <meta name="description" content="A static academic project website prototype for CREDO, a framework for assessing decision reliability under uncertainty.">
   <title>CREDO | Conformalized Risk Estimation for Decision Optimization</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -38,7 +51,7 @@
         <span class="panel-label">Decision risk</span>
         <p>Audit the probability that a prescribed decision is not near-optimal after the uncertain outcome is realized.</p>
         <div class="math-callout">
-          <span>P{ z ∉ π(Y) }</span>
+          <span>\( P\{ z \notin \pi(Y) \} \)</span>
         </div>
       </aside>
     </section>
@@ -68,13 +81,13 @@
     <section id="question" class="section accent">
       <div class="question-wrap">
         <p class="eyebrow">Core Question</p>
-        <h2>Given a candidate decision <span class="inline-math">z</span>, what is the probability that <span class="inline-math">z</span> is not near-optimal when the uncertain outcome <span class="inline-math">Y</span> is realized?</h2>
+        <h2>Given a candidate decision <span class="inline-math">\( z \)</span>, what is the probability that <span class="inline-math">\( z \)</span> is not near-optimal when the uncertain outcome <span class="inline-math">\( Y \)</span> is realized?</h2>
         <div class="formula" aria-label="Probability that z does not belong to pi of Y">
-          P{ z ∉ π(Y) }
+          \[ P\{ z \notin \pi(Y) \} \]
         </div>
         <div class="term-list" aria-label="Key terms">
-          <p><strong>Near-optimal:</strong> optimal up to a user-specified tolerance.</p>
-          <p><strong>Decision risk:</strong> the probability that a prescribed decision is not near-optimal under the realized uncertainty.</p>
+          <p><strong>Near-optimal:</strong> membership in <span class="inline-math">\( \pi(Y) \)</span>, meaning optimal up to a user-specified tolerance for realized outcome <span class="inline-math">\( Y \)</span>.</p>
+          <p><strong>Decision risk:</strong> the probability <span class="inline-math">\( P\{ z \notin \pi(Y) \} \)</span> that a prescribed decision <span class="inline-math">\( z \)</span> is not near-optimal under the realized uncertainty.</p>
           <p><strong>Distribution-free:</strong> the conformal guarantee does not require specifying the full data distribution, under the paper's assumptions.</p>
         </div>
       </div>
@@ -91,7 +104,7 @@
           <div>
             <h3>Map the decision to an inverse feasible region</h3>
             <p>
-              For a candidate decision <span class="inline-math">z</span>, CREDO considers the set of uncertain outcomes under which <span class="inline-math">z</span> would be near-optimal. This region is written as <span class="inline-math">π<sup>-1</sup>(z)</span>.
+              For a candidate decision <span class="inline-math">\( z \)</span>, CREDO considers the set of uncertain outcomes under which <span class="inline-math">\( z \)</span> would be near-optimal. This region is written as <span class="inline-math">\( \pi^{-1}(z) \)</span>.
             </p>
           </div>
         </article>
@@ -120,7 +133,7 @@
         <h2>Using multiple generated samples to avoid relying on a single point prediction</h2>
       </div>
       <p class="lead">
-        A single point prediction can be too narrow a basis for assessing the risk of a decision. By working with multiple generated samples, CREDO can assess whether sufficient probability mass is associated with the inverse feasible region and avoid relying solely on one predicted outcome. The goal is a conservative risk assessment, while conformal calibration provides finite-sample coverage guarantees under exchangeability.
+        A single point prediction can be too narrow a basis for assessing the risk of a decision <span class="inline-math">\( z \)</span>. By working with multiple generated samples, CREDO can assess whether sufficient probability mass is associated with the inverse feasible region <span class="inline-math">\( \pi^{-1}(z) \)</span> and avoid relying solely on one predicted outcome. The goal is a conservative risk assessment, while conformal calibration provides finite-sample coverage guarantees under exchangeability.
       </p>
     </section>
 
