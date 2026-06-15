@@ -171,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, 0.25);
-    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z1", "z2");
+    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z₁", "z₂");
 
     const triangle = vertices.map((vertex) => toCanvas(vertex.point));
     ctx.beginPath();
@@ -217,7 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, chooseGridStep(extent));
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
-    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y1", "y2");
+    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
 
     if (settings.mode === "p-value") {
