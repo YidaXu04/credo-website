@@ -704,17 +704,18 @@ mjx-container {
 }
 
 .risk-track {
+  display: block;
   height: 14px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e5ece7;
+  background: rgba(40, 92, 77, 0.12);
 }
 
 .risk-fill {
+  display: block;
   height: 100%;
-  min-width: 2px;
   border-radius: inherit;
-  background: #6d91a5;
+  background: var(--accent);
 }
 
 .risk-row.is-selected .risk-fill {
@@ -723,6 +724,12 @@ mjx-container {
 
 .risk-row.is-selected .risk-label {
   color: #8b4d1e;
+}
+
+.risk-row-value {
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .risk-explainer {
