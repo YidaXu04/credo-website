@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const decisionCanvas = document.getElementById("decision-canvas");
   const outcomeCanvas = document.getElementById("outcome-canvas");
+  const outcomeRadiusNote = document.getElementById("outcome-radius-note");
   const riskValue = document.getElementById("risk-value");
   const riskBars = document.getElementById("risk-bars");
 
@@ -66,6 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateOutputs(settings);
     drawDecisionSpace(decisionCanvas, settings.zIndex);
     drawOutcomeSpace(outcomeCanvas, settings, samples, residuals);
+    updateOutcomeNote(settings);
     updateRiskPanel(settings.zIndex, risks);
   }
 
@@ -83,6 +85,12 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
+  }
+
+  function updateOutcomeNote(settings) {
+    if (outcomeRadiusNote) {
+      outcomeRadiusNote.hidden = settings.mode !== "p-value";
+    }
   }
 
   function generateSamples(sigma, k) {
