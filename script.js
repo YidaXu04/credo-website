@@ -326,10 +326,11 @@ document.addEventListener("DOMContentLoaded", () => {
       track.className = "risk-track";
       const fill = document.createElement("span");
       fill.className = "risk-fill";
-      fill.style.width = `${Math.max(2, risk * 100)}%`;
+      fill.style.width = `${Math.max(0, Math.min(1, risk)) * 100}%`;
       track.append(fill);
 
       const value = document.createElement("span");
+      value.className = "risk-row-value";
       value.textContent = risk.toFixed(2);
 
       row.append(label, track, value);
