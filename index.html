@@ -19,6 +19,7 @@
     };
   </script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <script src="script.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -158,14 +159,99 @@
       </div>
     </section>
 
-    <section id="interactive-demo" class="section placeholder-section">
-      <div class="placeholder-content">
-        <p class="eyebrow">Planned extension</p>
-        <h2>Interactive demo</h2>
-        <p>
-          This planned section would host an interactive example where readers can adjust a candidate decision, uncertainty level, or generated samples and observe how the estimated decision risk changes.
+    <section id="interactive-demo" class="section demo-section">
+      <div class="section-heading">
+        <p class="eyebrow">Interactive 2D CREDO Demo</p>
+        <h2>Audit a candidate decision in a triangular linear program</h2>
+        <p class="lead">
+          Explore the LP \( \min_{z \in \mathcal{Z}} \langle y, z \rangle \), where \( \mathcal{Z} \) is the triangle with vertices \( (0,0) \), \( (1,0) \), and \( (0,1) \). The shaded outcome-space region approximates \( \pi^{-1}_{\epsilon}(z) \), the outcomes for which the selected decision remains near-optimal.
         </p>
       </div>
+
+      <div class="demo-shell" data-credo-demo>
+        <form class="demo-controls" aria-label="Interactive CREDO demo controls">
+          <label class="control-group" for="demo-z">
+            <span>Candidate decision \( z \)</span>
+            <select id="demo-z" name="z">
+              <option value="0">(0,0)</option>
+              <option value="1">(1,0)</option>
+              <option value="2">(0,1)</option>
+            </select>
+          </label>
+
+          <label class="control-group" for="demo-sigma">
+            <span>Uncertainty level \( \sigma \)</span>
+            <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35">
+            <output id="demo-sigma-value" for="demo-sigma">0.35</output>
+          </label>
+
+          <label class="control-group" for="demo-k">
+            <span>Generated samples \( K \)</span>
+            <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60">
+            <output id="demo-k-value" for="demo-k">60</output>
+          </label>
+
+          <label class="control-group" for="demo-epsilon">
+            <span>Near-optimal tolerance \( \epsilon \)</span>
+            <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08">
+            <output id="demo-epsilon-value" for="demo-epsilon">0.08</output>
+          </label>
+
+          <label class="control-group" for="demo-mode">
+            <span>Risk mode</span>
+            <select id="demo-mode" name="mode">
+              <option value="monte-carlo">Monte Carlo</option>
+              <option value="p-value">Simplified p-value radius</option>
+            </select>
+          </label>
+        </form>
+
+        <div class="demo-grid">
+          <article class="demo-panel">
+            <div class="demo-panel-heading">
+              <h3>Decision space</h3>
+              <p>\( \mathcal{Z} = \mathrm{conv}\{(0,0),(1,0),(0,1)\} \)</p>
+            </div>
+            <canvas id="decision-canvas" width="480" height="360" aria-label="Triangle feasible region and selected candidate decision"></canvas>
+            <div class="demo-legend" aria-label="Decision space legend">
+              <span><i class="legend-dot selected"></i>Selected \( z \)</span>
+              <span><i class="legend-dot vertex"></i>Candidate vertex</span>
+            </div>
+          </article>
+
+          <article class="demo-panel">
+            <div class="demo-panel-heading">
+              <h3>Outcome space</h3>
+              <p>Samples are tested against \( \pi^{-1}_{\epsilon}(z) \).</p>
+            </div>
+            <canvas id="outcome-canvas" width="560" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
+            <div class="demo-legend" aria-label="Outcome space legend">
+              <span><i class="legend-dot inside"></i>Near-optimal</span>
+              <span><i class="legend-dot outside"></i>Not near-optimal</span>
+              <span><i class="legend-swatch inverse"></i>\( \pi^{-1}_{\epsilon}(z) \)</span>
+            </div>
+          </article>
+
+          <article class="demo-panel risk-panel">
+            <div class="demo-panel-heading">
+              <h3>Risk estimate</h3>
+              <p>Estimated probability that \( z \) is not near-optimal.</p>
+            </div>
+            <div class="risk-number" aria-live="polite">
+              <span id="risk-value">0.00</span>
+              <small>\( \widehat{\alpha}(z) \)</small>
+            </div>
+            <div class="risk-bars" id="risk-bars" aria-label="Risk estimates for all candidate decisions"></div>
+            <p class="risk-explainer">
+              Lower risk means more generated outcomes keep the prescribed decision inside its inverse feasible region. Higher risk means the decision more often fails the near-optimality audit under the simulated uncertainty.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <p class="demo-note">
+        This is a simplified educational implementation of the CREDO workflow for a 2D linear program. It illustrates inverse feasible regions, generated samples, conformal-style balls, and estimated decision risk. It does not claim to reproduce the full theoretical guarantees or experiments from the paper.
+      </p>
     </section>
 
     <section id="assistant" class="section placeholder-section">
