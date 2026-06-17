@@ -237,6 +237,7 @@
             </div>
             <canvas id="decision-canvas" width="480" height="360" aria-label="Triangle feasible region and selected candidate decision"></canvas>
             <div class="demo-legend" aria-label="Decision space legend">
+              <span><i class="legend-swatch feasible"></i>Feasible region \( \mathcal{Z} \)</span>
               <span><i class="legend-dot selected"></i>Selected \( z \)</span>
               <span><i class="legend-dot vertex"></i>Candidate vertex</span>
             </div>
@@ -249,9 +250,10 @@
             </div>
             <canvas id="outcome-canvas" width="560" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
             <div class="demo-legend" aria-label="Outcome space legend">
+              <span><i class="legend-swatch distribution"></i>Simulated outcome distribution</span>
+              <span><i class="legend-swatch inverse"></i>Inverse feasible region \( \pi^{-1}_{\epsilon}(z) \)</span>
               <span><i class="legend-dot inside"></i>Near-optimal</span>
               <span><i class="legend-dot outside"></i>Not near-optimal</span>
-              <span><i class="legend-swatch inverse"></i>\( \pi^{-1}_{\epsilon}(z) \)</span>
             </div>
             <p class="outcome-note" id="outcome-radius-note" hidden>
               Hover or click a generated sample to inspect its conformal-style inner ball.

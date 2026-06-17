@@ -697,7 +697,7 @@ mjx-container {
 }
 
 .legend-dot.vertex {
-  background: var(--accent);
+  background: #37413d;
 }
 
 .legend-dot.inside {
@@ -716,8 +716,19 @@ mjx-container {
   border-radius: 2px;
 }
 
+.legend-swatch.feasible {
+  background: rgba(103, 112, 108, 0.26);
+  border-color: #1f2421;
+}
+
+.legend-swatch.distribution {
+  background: rgba(47, 120, 200, 0.28);
+  border-color: rgba(47, 120, 200, 0.74);
+}
+
 .legend-swatch.inverse {
-  background: rgba(69, 132, 156, 0.2);
+  background: rgba(126, 143, 151, 0.18);
+  border-color: rgba(83, 102, 111, 0.72);
 }
 
 .outcome-note {
