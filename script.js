@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const controls = {
     z: document.getElementById("demo-z"),
+    zValue: document.getElementById("demo-z-value"),
     sigma: document.getElementById("demo-sigma"),
     sigmaValue: document.getElementById("demo-sigma-value"),
     k: document.getElementById("demo-k"),
@@ -27,22 +28,96 @@ document.addEventListener("DOMContentLoaded", () => {
   const outcomeCanvas = document.getElementById("outcome-canvas");
   const outcomeRadiusNote = document.getElementById("outcome-radius-note");
   const riskValue = document.getElementById("risk-value");
+  const trueRiskValue = document.getElementById("true-risk-value");
   const riskBars = document.getElementById("risk-bars");
 
-  if (!decisionCanvas || !outcomeCanvas || !riskValue || !riskBars) {
+  if (!decisionCanvas || !outcomeCanvas || !riskValue || !trueRiskValue || !riskBars) {
     return;
   }
 
   const baseSamples = makeNormalPairs(150, 24591);
+  const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
+  let selectedZ = vertices[0].point.slice();
   let scheduled = false;
+  let draggingDecision = false;
+  let hoverSampleIndex = null;
+  let pinnedSampleIndex = null;
+  let currentDecisionView = null;
+  let currentOutcomeView = null;
 
-  Object.values(controls).forEach((control) => {
-    if (control && "addEventListener" in control) {
-      control.addEventListener("input", scheduleRender);
-      control.addEventListener("change", scheduleRender);
+  controls.z.addEventListener("change", () => {
+    const preset = vertices[Number.parseInt(controls.z.value, 10)];
+    if (preset) {
+      selectedZ = preset.point.slice();
+      syncPresetSelect();
+      scheduleRender();
     }
+  });
+
+  [controls.sigma, controls.k, controls.epsilon].forEach((control) => {
+    control.addEventListener("input", scheduleRender);
+    control.addEventListener("change", scheduleRender);
+  });
+
+  controls.mode.addEventListener("input", handleModeChange);
+  controls.mode.addEventListener("change", handleModeChange);
+
+  decisionCanvas.addEventListener("pointerdown", (event) => {
+    if (!currentDecisionView) {
+      return;
+    }
+    draggingDecision = true;
+    decisionCanvas.classList.add("is-dragging");
+    decisionCanvas.setPointerCapture(event.pointerId);
+    updateSelectedDecisionFromEvent(event);
+  });
+
+  decisionCanvas.addEventListener("pointermove", (event) => {
+    if (draggingDecision) {
+      updateSelectedDecisionFromEvent(event);
+    }
+  });
+
+  ["pointerup", "pointercancel"].forEach((eventName) => {
+    decisionCanvas.addEventListener(eventName, (event) => {
+      if (!draggingDecision) {
+        return;
+      }
+      draggingDecision = false;
+      decisionCanvas.classList.remove("is-dragging");
+      if (decisionCanvas.hasPointerCapture(event.pointerId)) {
+        decisionCanvas.releasePointerCapture(event.pointerId);
+      }
+    });
+  });
+
+  outcomeCanvas.addEventListener("pointermove", (event) => {
+    if (controls.mode.value !== "p-value") {
+      return;
+    }
+    const nearest = findNearestSampleIndex(event);
+    if (nearest !== hoverSampleIndex) {
+      hoverSampleIndex = nearest;
+      scheduleRender();
+    }
+  });
+
+  outcomeCanvas.addEventListener("pointerleave", () => {
+    if (hoverSampleIndex !== null) {
+      hoverSampleIndex = null;
+      scheduleRender();
+    }
+  });
+
+  outcomeCanvas.addEventListener("click", (event) => {
+    if (controls.mode.value !== "p-value") {
+      return;
+    }
+    const nearest = findNearestSampleIndex(event);
+    pinnedSampleIndex = nearest === null ? null : nearest;
+    scheduleRender();
   });
 
   render();
@@ -60,20 +135,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function render() {
     const settings = readSettings();
-    const samples = generateSamples(settings.sigma, settings.k);
+    const samples = generateSamples(baseSamples, settings.sigma, settings.k);
     const residuals = generateResiduals(settings.sigma);
-    const risks = vertices.map((_, index) => estimateRisk(index, samples, residuals, settings));
+    const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
+    const presetRisks = vertices.map((vertex) => {
+      return estimateRisk(vertex.point, samples, residuals, settings);
+    });
+    const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
+
+    if (pinnedSampleIndex !== null && pinnedSampleIndex >= samples.length) {
+      pinnedSampleIndex = null;
+    }
+    if (hoverSampleIndex !== null && hoverSampleIndex >= samples.length) {
+      hoverSampleIndex = null;
+    }
 
     updateOutputs(settings);
-    drawDecisionSpace(decisionCanvas, settings.zIndex);
-    drawOutcomeSpace(outcomeCanvas, settings, samples, residuals);
-    updateOutcomeNote(settings);
-    updateRiskPanel(settings.zIndex, risks);
+    drawDecisionSpace(decisionCanvas, settings.z);
+    drawOutcomeSpace(outcomeCanvas, settings, samples);
+    updateOutcomeNote(settings, samples);
+    updateRiskPanel(settings, selectedRisk, approximateTrueRisk, presetRisks);
   }
 
   function readSettings() {
     return {
-      zIndex: Number.parseInt(controls.z.value, 10),
+      z: selectedZ.slice(),
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
       epsilon: Number.parseFloat(controls.epsilon.value),
@@ -82,36 +168,64 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateOutputs(settings) {
+    controls.zValue.value = formatPoint(settings.z);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
+    syncPresetSelect();
   }
 
-  function updateOutcomeNote(settings) {
-    if (outcomeRadiusNote) {
-      outcomeRadiusNote.hidden = settings.mode !== "p-value";
+  function updateOutcomeNote(settings, samples) {
+    if (!outcomeRadiusNote) {
+      return;
     }
+
+    if (settings.mode !== "p-value") {
+      outcomeRadiusNote.hidden = true;
+      return;
+    }
+
+    outcomeRadiusNote.hidden = false;
+    const sample = samples[getActiveSampleIndex()];
+    if (!sample) {
+      outcomeRadiusNote.textContent = "Hover or click a generated sample to inspect its conformal-style inner ball.";
+      return;
+    }
+
+    if (!isNearOptimal(settings.z, sample, settings.epsilon)) {
+      outcomeRadiusNote.textContent = "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
+      return;
+    }
+
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon);
+    if (radius <= 1e-4) {
+      outcomeRadiusNote.textContent = "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
+      return;
+    }
+
+    outcomeRadiusNote.textContent = `Certified inner-ball radius for the selected sample: ${radius.toFixed(3)}.`;
   }
 
-  function generateSamples(sigma, k) {
+  function generateSamples(sourcePairs, sigma, k) {
     const samples = [];
     for (let i = 0; i < k; i += 1) {
-      const [a, b] = baseSamples[i];
-      samples.push([
-        0.18 + sigma * (0.88 * a + 0.18 * b),
-        0.04 + sigma * (0.3 * a + 0.78 * b)
-      ]);
+      const [a, b] = sourcePairs[i];
+      samples.push(transformSamplePair(a, b, sigma));
     }
     return samples;
+  }
+
+  function transformSamplePair(a, b, sigma) {
+    return [
+      0.18 + sigma * (0.88 * a + 0.18 * b),
+      0.04 + sigma * (0.3 * a + 0.78 * b)
+    ];
   }
 
   function generateResiduals(sigma) {
     return calibrationPredictions.map((pair, index) => {
       const [a, b] = pair;
-      const yhat = [
-        0.18 + sigma * (0.88 * a + 0.18 * b),
-        0.04 + sigma * (0.3 * a + 0.78 * b)
-      ];
+      const yhat = transformSamplePair(a, b, sigma);
       const [e1, e2] = calibrationErrors[index];
       const y = [
         yhat[0] + Math.max(0.025, sigma * 0.16) * e1,
@@ -125,32 +239,36 @@ document.addEventListener("DOMContentLoaded", () => {
     return y[0] * z[0] + y[1] * z[1];
   }
 
-  function isNearOptimal(zIndex, y, epsilon) {
-    const z = vertices[zIndex].point;
+  function isNearOptimal(z, y, epsilon) {
     const best = Math.min(...vertices.map((vertex) => objective(y, vertex.point)));
     return objective(y, z) <= best + epsilon + 1e-10;
   }
 
-  function halfspaceMargins(zIndex, y, epsilon) {
-    const z = vertices[zIndex].point;
+  function halfspaceMargins(z, y, epsilon) {
     return vertices
-      .filter((_, index) => index !== zIndex)
       .map((vertex) => {
         const a = [z[0] - vertex.point[0], z[1] - vertex.point[1]];
         const norm = Math.hypot(a[0], a[1]);
+        if (norm < 1e-10) {
+          return null;
+        }
         const signedMargin = epsilon - (a[0] * y[0] + a[1] * y[1]);
         return signedMargin / norm;
-      });
+      })
+      .filter((margin) => margin !== null);
   }
 
-  function distanceToBoundary(zIndex, y, epsilon) {
-    const margins = halfspaceMargins(zIndex, y, epsilon);
+  function distanceToBoundary(z, y, epsilon) {
+    const margins = halfspaceMargins(z, y, epsilon);
+    if (margins.length === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
     return Math.max(0, Math.min(...margins));
   }
 
-  function estimateRisk(zIndex, samples, residuals, settings) {
+  function estimateRisk(z, samples, residuals, settings) {
     const penalties = samples.map((sample) => {
-      if (!isNearOptimal(zIndex, sample, settings.epsilon)) {
+      if (!isNearOptimal(z, sample, settings.epsilon)) {
         return 1;
       }
 
@@ -158,7 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return 0;
       }
 
-      const distance = distanceToBoundary(zIndex, sample, settings.epsilon);
+      const distance = distanceToBoundary(z, sample, settings.epsilon);
       const covered = residuals.filter((residual) => residual <= distance).length;
       return Math.max(0, 1 - covered / (residuals.length + 1));
     });
@@ -166,7 +284,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return penalties.reduce((sum, value) => sum + value, 0) / penalties.length;
   }
 
-  function drawDecisionSpace(canvas, selectedIndex) {
+  function estimateTrueRisk(z, settings) {
+    let failures = 0;
+    trueRiskSamples.forEach(([a, b]) => {
+      const sample = transformSamplePair(a, b, settings.sigma);
+      if (!isNearOptimal(z, sample, settings.epsilon)) {
+        failures += 1;
+      }
+    });
+    return failures / trueRiskSamples.length;
+  }
+
+  function drawDecisionSpace(canvas, z) {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -176,6 +305,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const yMin = -0.15;
     const yMax = 1.15;
     const toCanvas = makeProjector(plot, xMin, xMax, yMin, yMax);
+    const fromCanvas = makeInverseProjector(plot, xMin, xMax, yMin, yMax);
+    currentDecisionView = { fromCanvas };
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, 0.25);
@@ -193,24 +324,37 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    vertices.forEach((vertex, index) => {
+    vertices.forEach((vertex) => {
       const [x, y] = toCanvas(vertex.point);
-      const selected = index === selectedIndex;
       ctx.beginPath();
-      ctx.arc(x, y, selected ? 9 : 6, 0, Math.PI * 2);
-      ctx.fillStyle = selected ? "#b26a2c" : "#285c4d";
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = "#285c4d";
       ctx.fill();
-      ctx.lineWidth = selected ? 4 : 2;
-      ctx.strokeStyle = selected ? "rgba(178, 106, 44, 0.28)" : "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
       ctx.stroke();
       ctx.fillStyle = "#17211c";
       ctx.font = "13px Arial, Helvetica, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(vertex.label, x, y - 15);
     });
+
+    const [zx, zy] = toCanvas(z);
+    ctx.beginPath();
+    ctx.arc(zx, zy, 9, 0, Math.PI * 2);
+    ctx.fillStyle = "#b26a2c";
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(178, 106, 44, 0.28)";
+    ctx.stroke();
+
+    ctx.fillStyle = "#8b4d1e";
+    ctx.font = "700 13px Arial, Helvetica, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`z = ${formatPoint(z)}`, Math.min(zx + 12, plot.right - 92), Math.max(zy - 12, plot.top + 16));
   }
 
-  function drawOutcomeSpace(canvas, settings, samples, residuals) {
+  function drawOutcomeSpace(canvas, settings, samples) {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -221,34 +365,36 @@ document.addEventListener("DOMContentLoaded", () => {
     const yMax = extent;
     const plot = { left: 56, top: 30, right: width - 24, bottom: height - 48 };
     const toCanvas = makeProjector(plot, xMin, xMax, yMin, yMax);
+    currentOutcomeView = { samples, toCanvas, plot };
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, chooseGridStep(extent));
-    shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
+    shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
 
-    if (settings.mode === "p-value") {
-      drawConformalBalls(ctx, samples, residuals, toCanvas, xMin, xMax, plot);
+    const activeSample = samples[getActiveSampleIndex()];
+    if (settings.mode === "p-value" && activeSample) {
+      drawSelectedConformalBall(ctx, settings, activeSample, toCanvas, plot, xMin, xMax, yMin, yMax);
     }
 
-    samples.forEach((sample) => {
+    samples.forEach((sample, index) => {
       const [x, y] = toCanvas(sample);
-      const inside = isNearOptimal(settings.zIndex, sample, settings.epsilon);
+      const inside = isNearOptimal(settings.z, sample, settings.epsilon);
       if (!pointInPlot(x, y, plot)) {
         return;
       }
       ctx.beginPath();
-      ctx.arc(x, y, 4.3, 0, Math.PI * 2);
+      ctx.arc(x, y, index === getActiveSampleIndex() ? 6 : 4.3, 0, Math.PI * 2);
       ctx.fillStyle = inside ? "#285c4d" : "#b84d3f";
       ctx.fill();
-      ctx.lineWidth = 1.3;
-      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = index === getActiveSampleIndex() ? 2.4 : 1.3;
+      ctx.strokeStyle = index === getActiveSampleIndex() ? "#b26a2c" : "#ffffff";
       ctx.stroke();
     });
   }
 
-  function shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings) {
+  function shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings) {
     const step = 5;
     ctx.fillStyle = "rgba(69, 132, 156, 0.18)";
     for (let py = plot.top; py < plot.bottom; py += step) {
@@ -257,7 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
           xMin + ((px - plot.left) / (plot.right - plot.left)) * (xMax - xMin),
           yMax - ((py - plot.top) / (plot.bottom - plot.top)) * (yMax - yMin)
         ];
-        if (isNearOptimal(settings.zIndex, y, settings.epsilon)) {
+        if (isNearOptimal(settings.z, y, settings.epsilon)) {
           ctx.fillRect(px, py, step + 1, step + 1);
         }
       }
@@ -265,17 +411,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings) {
-    const z = vertices[settings.zIndex].point;
     ctx.save();
     ctx.setLineDash([6, 5]);
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = "rgba(40, 92, 77, 0.78)";
 
-    vertices.forEach((vertex, index) => {
-      if (index === settings.zIndex) {
+    vertices.forEach((vertex) => {
+      const a = [settings.z[0] - vertex.point[0], settings.z[1] - vertex.point[1]];
+      if (Math.hypot(a[0], a[1]) < 1e-10) {
         return;
       }
-      const a = [z[0] - vertex.point[0], z[1] - vertex.point[1]];
       const points = boundaryIntersections(a, settings.epsilon, xMin, xMax, yMin, yMax);
       if (points.length < 2) {
         return;
@@ -291,59 +436,149 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  function drawConformalBalls(ctx, samples, residuals, toCanvas, xMin, xMax, plot) {
-    const sorted = residuals.slice().sort((a, b) => a - b);
-    const radius = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.8))];
-    const pixelRadius = (radius / (xMax - xMin)) * (plot.right - plot.left);
-    const count = Math.min(12, samples.length);
-    const stride = Math.max(1, Math.floor(samples.length / count));
-
-    ctx.save();
-    ctx.strokeStyle = "rgba(178, 106, 44, 0.32)";
-    ctx.fillStyle = "rgba(178, 106, 44, 0.055)";
-    ctx.lineWidth = 1.1;
-    for (let i = 0; i < samples.length; i += stride) {
-      if (i / stride >= count) {
-        break;
-      }
-      const [x, y] = toCanvas(samples[i]);
-      if (!pointInPlot(x, y, plot)) {
-        continue;
-      }
-      ctx.beginPath();
-      ctx.arc(x, y, pixelRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+  function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax, yMin, yMax) {
+    if (!isNearOptimal(settings.z, sample, settings.epsilon)) {
+      return;
     }
+
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon);
+    if (radius <= 1e-4 || !Number.isFinite(radius)) {
+      return;
+    }
+
+    const [x, y] = toCanvas(sample);
+    if (!pointInPlot(x, y, plot)) {
+      return;
+    }
+
+    const pixelRadiusX = (radius / (xMax - xMin)) * (plot.right - plot.left);
+    const pixelRadiusY = (radius / (yMax - yMin)) * (plot.bottom - plot.top);
+    ctx.save();
+    ctx.strokeStyle = "rgba(178, 106, 44, 0.58)";
+    ctx.fillStyle = "rgba(178, 106, 44, 0.09)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(x, y, pixelRadiusX, pixelRadiusY, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 
-  function updateRiskPanel(selectedIndex, risks) {
-    riskValue.textContent = risks[selectedIndex].toFixed(2);
+  function updateRiskPanel(settings, selectedRisk, approximateTrueRisk, presetRisks) {
+    riskValue.textContent = selectedRisk.toFixed(2);
+    trueRiskValue.textContent = approximateTrueRisk.toFixed(2);
     riskBars.replaceChildren();
 
-    risks.forEach((risk, index) => {
+    const rows = [
+      { label: `selected ${formatPoint(settings.z)}`, risk: selectedRisk, selected: true },
+      ...vertices.map((vertex, index) => ({
+        label: `preset ${vertex.label}`,
+        risk: presetRisks[index],
+        selected: false
+      }))
+    ];
+
+    rows.forEach((item) => {
       const row = document.createElement("div");
-      row.className = `risk-row${index === selectedIndex ? " is-selected" : ""}`;
+      row.className = `risk-row${item.selected ? " is-selected" : ""}`;
 
       const label = document.createElement("span");
       label.className = "risk-label";
-      label.textContent = vertices[index].label;
+      label.textContent = item.label;
 
       const track = document.createElement("span");
       track.className = "risk-track";
       const fill = document.createElement("span");
       fill.className = "risk-fill";
-      fill.style.width = `${Math.max(0, Math.min(1, risk)) * 100}%`;
+      fill.style.width = `${Math.max(0, Math.min(1, item.risk)) * 100}%`;
       track.append(fill);
 
       const value = document.createElement("span");
       value.className = "risk-row-value";
-      value.textContent = risk.toFixed(2);
+      value.textContent = item.risk.toFixed(2);
 
       row.append(label, track, value);
       riskBars.append(row);
     });
+  }
+
+  function updateSelectedDecisionFromEvent(event) {
+    const [x, y] = getCanvasPoint(decisionCanvas, event);
+    selectedZ = projectToTriangle(currentDecisionView.fromCanvas([x, y]));
+    syncPresetSelect();
+    scheduleRender();
+    event.preventDefault();
+  }
+
+  function handleModeChange() {
+    if (controls.mode.value !== "p-value") {
+      hoverSampleIndex = null;
+      pinnedSampleIndex = null;
+    }
+    scheduleRender();
+  }
+
+  function findNearestSampleIndex(event) {
+    if (!currentOutcomeView) {
+      return null;
+    }
+
+    const [pointerX, pointerY] = getCanvasPoint(outcomeCanvas, event);
+    let nearestIndex = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    currentOutcomeView.samples.forEach((sample, index) => {
+      const [x, y] = currentOutcomeView.toCanvas(sample);
+      if (!pointInPlot(x, y, currentOutcomeView.plot)) {
+        return;
+      }
+      const distance = Math.hypot(pointerX - x, pointerY - y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    return nearestDistance <= 13 ? nearestIndex : null;
+  }
+
+  function getActiveSampleIndex() {
+    return hoverSampleIndex === null ? pinnedSampleIndex : hoverSampleIndex;
+  }
+
+  function syncPresetSelect() {
+    const presetIndex = vertices.findIndex((vertex) => pointsAlmostEqual(selectedZ, vertex.point));
+    controls.z.value = presetIndex === -1 ? "custom" : String(presetIndex);
+  }
+
+  function projectToTriangle(point) {
+    const [x, y] = point;
+    if (x >= 0 && y >= 0 && x + y <= 1) {
+      return [x, y];
+    }
+
+    const edges = [
+      [vertices[0].point, vertices[1].point],
+      [vertices[1].point, vertices[2].point],
+      [vertices[2].point, vertices[0].point]
+    ];
+    return edges
+      .map(([a, b]) => projectToSegment(point, a, b))
+      .sort((a, b) => {
+        return squaredDistance(point, a) - squaredDistance(point, b);
+      })[0];
+  }
+
+  function projectToSegment(point, a, b) {
+    const ab = [b[0] - a[0], b[1] - a[1]];
+    const lengthSquared = ab[0] * ab[0] + ab[1] * ab[1];
+    const t = lengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((point[0] - a[0]) * ab[0] + (point[1] - a[1]) * ab[1]) / lengthSquared));
+    return [a[0] + t * ab[0], a[1] + t * ab[1]];
+  }
+
+  function squaredDistance(a, b) {
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
   }
 
   function clearCanvas(ctx, width, height) {
@@ -425,6 +660,13 @@ document.addEventListener("DOMContentLoaded", () => {
     ];
   }
 
+  function makeInverseProjector(plot, xMin, xMax, yMin, yMax) {
+    return ([px, py]) => [
+      xMin + ((px - plot.left) / (plot.right - plot.left)) * (xMax - xMin),
+      yMax - ((py - plot.top) / (plot.bottom - plot.top)) * (yMax - yMin)
+    ];
+  }
+
   function boundaryIntersections(a, epsilon, xMin, xMax, yMin, yMax) {
     const points = [];
     const [a1, a2] = a;
@@ -447,6 +689,14 @@ document.addEventListener("DOMContentLoaded", () => {
       .slice(0, 2);
   }
 
+  function getCanvasPoint(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    return [
+      ((event.clientX - rect.left) / rect.width) * canvas.width,
+      ((event.clientY - rect.top) / rect.height) * canvas.height
+    ];
+  }
+
   function pointInPlot(x, y, plot) {
     return x >= plot.left && x <= plot.right && y >= plot.top && y <= plot.bottom;
   }
@@ -466,6 +716,14 @@ document.addEventListener("DOMContentLoaded", () => {
       return "0";
     }
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+
+  function formatPoint(point) {
+    return `(${point[0].toFixed(2)}, ${point[1].toFixed(2)})`;
+  }
+
+  function pointsAlmostEqual(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.005;
   }
 
   function makeNormalPairs(count, seed) {
