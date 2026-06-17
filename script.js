@@ -33,7 +33,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const trueRiskValue = document.getElementById("true-risk-value");
   const riskBars = document.getElementById("risk-bars");
 
-  if (!decisionCanvas || !outcomeCanvas || !riskValue || !trueRiskValue || !riskBars) {
+  if (
+    Object.values(controls).some((control) => !control)
+    || !decisionCanvas
+    || !outcomeCanvas
+    || !outcomeRadiusNote
+    || !riskValue
+    || !trueRiskValue
+    || !riskBars
+  ) {
     return;
   }
 
@@ -230,25 +238,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function transformSamplePair(a, b, sigma, samplePattern, index = 0) {
+    const sigmaScale = getSamplePatternSigmaScale(samplePattern);
     const baseline = [
-      0.18 + sigma * (0.88 * a + 0.18 * b),
-      0.04 + sigma * (0.3 * a + 0.78 * b)
+      0.18 + sigma * sigmaScale * (0.88 * a + 0.18 * b),
+      0.04 + sigma * sigmaScale * (0.3 * a + 0.78 * b)
     ];
 
     if (samplePattern === "shifted") {
-      return [baseline[0] + 0.54, baseline[1] - 0.42];
-    }
-
-    if (samplePattern === "wider") {
-      return [
-        0.18 + sigma * 1.75 * (0.88 * a + 0.18 * b),
-        0.04 + sigma * 1.75 * (0.3 * a + 0.78 * b)
-      ];
+      return [baseline[0] + 0.34, baseline[1] - 0.03];
     }
 
     if (samplePattern === "mixture") {
       const firstCluster = index % 2 === 0;
-      const center = firstCluster ? [-0.42, 0.58] : [0.76, -0.38];
+      const center = firstCluster ? [-0.09, 0.48] : [0.62, -0.03];
       const spread = Math.max(0.05, sigma * 0.52);
       return [
         center[0] + spread * (0.72 * a + 0.1 * b),
@@ -257,6 +259,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     return baseline;
+  }
+
+  function getSamplePatternSigmaScale(samplePattern) {
+    return samplePattern === "wider" ? 1.75 : 1;
   }
 
   function generateResiduals(settings) {
@@ -395,7 +401,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const extent = Math.max(1.15, settings.sigma * 2.2 + 0.55);
+    const sigmaScale = getSamplePatternSigmaScale(settings.samplePattern);
+    const extent = Math.max(1.15, settings.sigma * sigmaScale * 2.2 + 0.55);
     const xMin = -extent;
     const xMax = extent;
     const yMin = -extent;
