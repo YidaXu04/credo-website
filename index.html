@@ -213,8 +213,9 @@
             <label class="control-group" for="demo-mode">
               <span>Risk mode</span>
               <select id="demo-mode" name="mode">
-                <option value="monte-carlo">Monte Carlo</option>
-                <option value="p-value">Simplified p-value radius</option>
+                <option value="monte-carlo">Monte Carlo radius R∞</option>
+                <option value="p-value">p-value radius Rp</option>
+                <option value="e-value">e-value radius Re</option>
               </select>
             </label>
           </div>
@@ -271,7 +272,7 @@
             </div>
             <div class="risk-bars" id="risk-bars" aria-label="Risk estimates for all candidate decisions"></div>
             <p class="risk-explainer">
-              Lower risk means more generated outcomes keep the prescribed decision inside its inverse feasible region. The estimated risk shown above follows the selected demo risk mode. The approximate true risk is a hard 0/1 failure rate computed from a large simulated sample, and is shown only for intuition. The full CREDO framework is designed to provide conservative risk estimates under its assumptions.
+              Monte Carlo radius R∞ is the most intuitive hard failure-rate estimate. p-value radius Rp uses calibration quantiles as a balanced conformal-style mode. e-value radius Re is more conservative and is designed for stronger post-hoc validity intuition. The approximate true risk remains a hard 0/1 failure rate under the simulated distribution. This is a simplified 2D educational implementation and does not claim to reproduce all theoretical guarantees or experiments.
             </p>
           </article>
         </div>
