@@ -56,10 +56,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  [controls.sigma, controls.k, controls.epsilon, controls.mode].forEach((control) => {
+  [controls.sigma, controls.k, controls.epsilon].forEach((control) => {
     control.addEventListener("input", scheduleRender);
     control.addEventListener("change", scheduleRender);
   });
+
+  controls.mode.addEventListener("input", handleModeChange);
+  controls.mode.addEventListener("change", handleModeChange);
 
   decisionCanvas.addEventListener("pointerdown", (event) => {
     if (!currentDecisionView) {
@@ -307,7 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, 0.25);
-    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z1", "z2");
+    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z₁", "z₂");
 
     const triangle = vertices.map((vertex) => toCanvas(vertex.point));
     ctx.beginPath();
@@ -367,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, chooseGridStep(extent));
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
-    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y1", "y2");
+    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
 
     const activeSample = samples[getActiveSampleIndex()];
@@ -505,6 +508,14 @@ document.addEventListener("DOMContentLoaded", () => {
     syncPresetSelect();
     scheduleRender();
     event.preventDefault();
+  }
+
+  function handleModeChange() {
+    if (controls.mode.value !== "p-value") {
+      hoverSampleIndex = null;
+      pinnedSampleIndex = null;
+    }
+    scheduleRender();
   }
 
   function findNearestSampleIndex(event) {
