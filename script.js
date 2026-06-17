@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    outcomeRadiusNote.textContent = `Certified inner-ball radius for the selected sample: ${radius.toFixed(3)}.`;
+    outcomeRadiusNote.textContent = `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
   function generateSamples(sourcePairs, settings) {
