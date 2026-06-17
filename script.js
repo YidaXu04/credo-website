@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const controls = {
     z: document.getElementById("demo-z"),
     zValue: document.getElementById("demo-z-value"),
+    samplePattern: document.getElementById("demo-sample-pattern"),
+    resample: document.getElementById("demo-resample"),
     sigma: document.getElementById("demo-sigma"),
     sigmaValue: document.getElementById("demo-sigma-value"),
     k: document.getElementById("demo-k"),
@@ -35,7 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const baseSamples = makeNormalPairs(150, 24591);
+  const sampleCountMax = 150;
+  let generatedSampleSeed = 24591;
+  let generatedSamplePairs = makeNormalPairs(sampleCountMax, generatedSampleSeed);
   const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
@@ -59,6 +63,15 @@ document.addEventListener("DOMContentLoaded", () => {
   [controls.sigma, controls.k, controls.epsilon].forEach((control) => {
     control.addEventListener("input", scheduleRender);
     control.addEventListener("change", scheduleRender);
+  });
+
+  controls.samplePattern.addEventListener("input", handleSamplePatternChange);
+  controls.samplePattern.addEventListener("change", handleSamplePatternChange);
+  controls.resample.addEventListener("click", () => {
+    generatedSampleSeed = makeResampleSeed();
+    generatedSamplePairs = makeNormalPairs(sampleCountMax, generatedSampleSeed);
+    clearSampleSelection();
+    scheduleRender();
   });
 
   controls.mode.addEventListener("input", handleModeChange);
@@ -135,8 +148,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function render() {
     const settings = readSettings();
-    const samples = generateSamples(baseSamples, settings.sigma, settings.k);
-    const residuals = generateResiduals(settings.sigma);
+    const samples = generateSamples(generatedSamplePairs, settings);
+    const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
     const presetRisks = vertices.map((vertex) => {
       return estimateRisk(vertex.point, samples, residuals, settings);
@@ -160,6 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function readSettings() {
     return {
       z: selectedZ.slice(),
+      samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
       epsilon: Number.parseFloat(controls.epsilon.value),
@@ -206,30 +220,53 @@ document.addEventListener("DOMContentLoaded", () => {
     outcomeRadiusNote.textContent = `Certified inner-ball radius for the selected sample: ${radius.toFixed(3)}.`;
   }
 
-  function generateSamples(sourcePairs, sigma, k) {
+  function generateSamples(sourcePairs, settings) {
     const samples = [];
-    for (let i = 0; i < k; i += 1) {
+    for (let i = 0; i < settings.k; i += 1) {
       const [a, b] = sourcePairs[i];
-      samples.push(transformSamplePair(a, b, sigma));
+      samples.push(transformSamplePair(a, b, settings.sigma, settings.samplePattern, i));
     }
     return samples;
   }
 
-  function transformSamplePair(a, b, sigma) {
-    return [
+  function transformSamplePair(a, b, sigma, samplePattern, index = 0) {
+    const baseline = [
       0.18 + sigma * (0.88 * a + 0.18 * b),
       0.04 + sigma * (0.3 * a + 0.78 * b)
     ];
+
+    if (samplePattern === "shifted") {
+      return [baseline[0] + 0.54, baseline[1] - 0.42];
+    }
+
+    if (samplePattern === "wider") {
+      return [
+        0.18 + sigma * 1.75 * (0.88 * a + 0.18 * b),
+        0.04 + sigma * 1.75 * (0.3 * a + 0.78 * b)
+      ];
+    }
+
+    if (samplePattern === "mixture") {
+      const firstCluster = index % 2 === 0;
+      const center = firstCluster ? [-0.42, 0.58] : [0.76, -0.38];
+      const spread = Math.max(0.05, sigma * 0.52);
+      return [
+        center[0] + spread * (0.72 * a + 0.1 * b),
+        center[1] + spread * (0.15 * a + 0.68 * b)
+      ];
+    }
+
+    return baseline;
   }
 
-  function generateResiduals(sigma) {
+  function generateResiduals(settings) {
     return calibrationPredictions.map((pair, index) => {
       const [a, b] = pair;
-      const yhat = transformSamplePair(a, b, sigma);
+      const yhat = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
       const [e1, e2] = calibrationErrors[index];
       const y = [
-        yhat[0] + Math.max(0.025, sigma * 0.16) * e1,
-        yhat[1] + Math.max(0.025, sigma * 0.16) * e2
+        yhat[0] + Math.max(0.025, settings.sigma * 0.16) * e1,
+        yhat[1] + Math.max(0.025, settings.sigma * 0.16) * e2
       ];
       return Math.hypot(y[0] - yhat[0], y[1] - yhat[1]);
     });
@@ -286,8 +323,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function estimateTrueRisk(z, settings) {
     let failures = 0;
-    trueRiskSamples.forEach(([a, b]) => {
-      const sample = transformSamplePair(a, b, settings.sigma);
+    trueRiskSamples.forEach(([a, b], index) => {
+      const sample = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
       if (!isNearOptimal(z, sample, settings.epsilon)) {
         failures += 1;
       }
@@ -512,10 +549,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleModeChange() {
     if (controls.mode.value !== "p-value") {
-      hoverSampleIndex = null;
-      pinnedSampleIndex = null;
+      clearSampleSelection();
     }
     scheduleRender();
+  }
+
+  function handleSamplePatternChange() {
+    clearSampleSelection();
+    scheduleRender();
+  }
+
+  function clearSampleSelection() {
+    hoverSampleIndex = null;
+    pinnedSampleIndex = null;
   }
 
   function findNearestSampleIndex(event) {
@@ -737,6 +783,12 @@ document.addEventListener("DOMContentLoaded", () => {
       pairs.push([radius * Math.cos(angle), radius * Math.sin(angle)]);
     }
     return pairs;
+  }
+
+  function makeResampleSeed() {
+    const timestamp = Date.now() >>> 0;
+    const randomPart = Math.floor(Math.random() * 0xffffffff) >>> 0;
+    return (timestamp ^ randomPart ^ generatedSampleSeed) >>> 0;
   }
 
   function mulberry32(seed) {
