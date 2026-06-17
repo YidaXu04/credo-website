@@ -170,58 +170,61 @@
 
       <div class="demo-shell" data-credo-demo>
         <form class="demo-controls" aria-label="Interactive CREDO demo controls">
-          <label class="control-group" for="demo-z">
-            <span>Candidate preset \( z \)</span>
-            <select id="demo-z" name="z">
-              <option value="0">(0,0)</option>
-              <option value="1">(1,0)</option>
-              <option value="2">(0,1)</option>
-              <option value="custom">Dragged custom point</option>
-            </select>
-            <output id="demo-z-value" for="demo-z">(0.00, 0.00)</output>
-          </label>
+          <div class="demo-control-grid">
+            <label class="control-group" for="demo-z">
+              <span>Candidate preset \( z \)</span>
+              <select id="demo-z" name="z">
+                <option value="0">(0,0)</option>
+                <option value="1">(1,0)</option>
+                <option value="2">(0,1)</option>
+                <option value="custom">Dragged custom point</option>
+              </select>
+              <output class="control-helper" id="demo-z-value" for="demo-z">Current z: (0.00, 0.00)</output>
+            </label>
 
-          <label class="control-group" for="demo-sample-pattern">
-            <span>Sample pattern</span>
-            <select id="demo-sample-pattern" name="sample-pattern">
-              <option value="baseline">Baseline Gaussian</option>
-              <option value="shifted">Shifted mean</option>
-              <option value="wider">Wider uncertainty</option>
-              <option value="mixture">Two-cluster mixture</option>
-            </select>
-          </label>
+            <label class="control-group" for="demo-sample-pattern">
+              <span>Sample pattern</span>
+              <select id="demo-sample-pattern" name="sample-pattern">
+                <option value="baseline">Baseline Gaussian</option>
+                <option value="shifted">Shifted mean</option>
+                <option value="wider">Wider uncertainty</option>
+                <option value="mixture">Two-cluster mixture</option>
+              </select>
+            </label>
 
-          <label class="control-group" for="demo-sigma">
-            <span>Uncertainty level \( \sigma \)</span>
-            <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35">
-            <output id="demo-sigma-value" for="demo-sigma">0.35</output>
-          </label>
+            <label class="control-group" for="demo-sigma">
+              <span>Uncertainty level \( \sigma \)</span>
+              <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35">
+              <output id="demo-sigma-value" for="demo-sigma">0.35</output>
+            </label>
 
-          <label class="control-group" for="demo-k">
-            <span>Generated samples \( K \)</span>
-            <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60">
-            <output id="demo-k-value" for="demo-k">60</output>
-          </label>
+            <label class="control-group" for="demo-k">
+              <span>Generated samples \( K \)</span>
+              <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60">
+              <output id="demo-k-value" for="demo-k">60</output>
+            </label>
 
-          <label class="control-group" for="demo-epsilon">
-            <span>Near-optimal tolerance \( \epsilon \)</span>
-            <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08">
-            <output id="demo-epsilon-value" for="demo-epsilon">0.08</output>
-          </label>
+            <label class="control-group" for="demo-epsilon">
+              <span>Near-optimal tolerance \( \epsilon \)</span>
+              <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08">
+              <output id="demo-epsilon-value" for="demo-epsilon">0.08</output>
+            </label>
 
-          <label class="control-group" for="demo-mode">
-            <span>Risk mode</span>
-            <select id="demo-mode" name="mode">
-              <option value="monte-carlo">Monte Carlo</option>
-              <option value="p-value">Simplified p-value radius</option>
-            </select>
-          </label>
+            <label class="control-group" for="demo-mode">
+              <span>Risk mode</span>
+              <select id="demo-mode" name="mode">
+                <option value="monte-carlo">Monte Carlo</option>
+                <option value="p-value">Simplified p-value radius</option>
+              </select>
+            </label>
+          </div>
 
-          <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
-
-          <p class="sample-note">
-            Use sample patterns or resampling to see how the same decision behaves under different simulated outcome distributions.
-          </p>
+          <div class="demo-action-row">
+            <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
+            <p class="sample-note">
+              Use sample patterns or resampling to see how the same decision behaves under different simulated outcome distributions.
+            </p>
+          </div>
         </form>
 
         <div class="demo-grid">

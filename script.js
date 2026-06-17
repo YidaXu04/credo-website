@@ -182,7 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateOutputs(settings) {
-    controls.zValue.value = formatPoint(settings.z);
+    controls.zValue.textContent = `Current z: ${formatPoint(settings.z)}`;
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);

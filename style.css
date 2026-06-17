@@ -489,13 +489,19 @@ mjx-container {
 
 .demo-controls {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
   margin-bottom: 18px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.74);
+}
+
+.demo-control-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .control-group {
@@ -512,7 +518,9 @@ mjx-container {
 
 .control-group span {
   color: var(--accent-dark);
+  font-size: 0.82rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .control-group select,
@@ -520,8 +528,16 @@ mjx-container {
   grid-column: 1 / -1;
 }
 
+.demo-action-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(216, 224, 218, 0.88);
+}
+
 .control-button {
-  align-self: end;
+  flex: 0 0 auto;
   min-height: 40px;
   padding: 0 14px;
   border: 1px solid var(--accent);
@@ -540,7 +556,7 @@ mjx-container {
 }
 
 .sample-note {
-  grid-column: 1 / -1;
+  flex: 1 1 360px;
   margin: 0;
   color: var(--muted);
   font-family: Arial, Helvetica, sans-serif;
@@ -568,8 +584,14 @@ mjx-container {
 }
 
 #demo-z-value {
-  min-width: 92px;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  text-align: left;
 }
 
 .control-group input[type="range"] {
@@ -869,6 +891,12 @@ mjx-container {
   margin: 0;
 }
 
+@media (max-width: 1040px) {
+  .demo-control-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 820px) {
   :root {
     --nav-offset: 136px;
@@ -902,10 +930,19 @@ mjx-container {
 
   .two-column,
   .cards,
-  .demo-controls,
+  .demo-control-grid,
   .demo-grid,
   .risk-panel {
     grid-template-columns: 1fr;
+  }
+
+  .demo-action-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sample-note {
+    flex-basis: auto;
   }
 
   .risk-explainer {
