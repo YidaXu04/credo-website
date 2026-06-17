@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   outcomeCanvas.addEventListener("pointermove", (event) => {
-    if (controls.mode.value !== "p-value") {
+    if (!isConformalRadiusMode(controls.mode.value)) {
       return;
     }
     const nearest = findNearestSampleIndex(event);
@@ -133,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   outcomeCanvas.addEventListener("click", (event) => {
-    if (controls.mode.value !== "p-value") {
+    if (!isConformalRadiusMode(controls.mode.value)) {
       return;
     }
     const nearest = findNearestSampleIndex(event);
@@ -202,7 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (settings.mode !== "p-value") {
+    if (!isConformalRadiusMode(settings.mode)) {
       outcomeRadiusNote.hidden = true;
       return;
     }
@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    outcomeRadiusNote.textContent = `Certified inner-ball radius for the selected sample: ${radius.toFixed(3)}.`;
+    outcomeRadiusNote.textContent = `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
   function generateSamples(sourcePairs, settings) {
@@ -310,21 +310,36 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function estimateRisk(z, samples, residuals, settings) {
-    const penalties = samples.map((sample) => {
-      if (!isNearOptimal(z, sample, settings.epsilon)) {
-        return 1;
-      }
-
-      if (settings.mode === "monte-carlo") {
-        return 0;
-      }
-
-      const distance = distanceToBoundary(z, sample, settings.epsilon);
-      const covered = residuals.filter((residual) => residual <= distance).length;
-      return Math.max(0, 1 - covered / (residuals.length + 1));
-    });
+    const penalties = samples.map((sample) => estimateSampleRisk(z, sample, residuals, settings));
 
     return penalties.reduce((sum, value) => sum + value, 0) / penalties.length;
+  }
+
+  function estimateSampleRisk(z, sample, residuals, settings) {
+    if (!isNearOptimal(z, sample, settings.epsilon)) {
+      return 1;
+    }
+
+    if (settings.mode === "monte-carlo") {
+      return 0;
+    }
+
+    const distance = distanceToBoundary(z, sample, settings.epsilon);
+    if (distance <= 1e-9 || !Number.isFinite(distance)) {
+      return 1;
+    }
+
+    if (settings.mode === "p-value") {
+      const covered = residuals.filter((residual) => residual <= distance).length;
+      return clamp01(Math.max(0, 1 - covered / (residuals.length + 1)));
+    }
+
+    if (settings.mode === "e-value") {
+      const residualSum = residuals.reduce((sum, residual) => sum + residual, 0);
+      return clamp01(Math.max(0, (residualSum + distance) / ((residuals.length + 1) * distance)));
+    }
+
+    return 1;
   }
 
   function estimateTrueRisk(z, settings) {
@@ -418,7 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
 
     const activeSample = samples[getActiveSampleIndex()];
-    if (settings.mode === "p-value" && activeSample) {
+    if (isConformalRadiusMode(settings.mode) && activeSample) {
       drawSelectedConformalBall(ctx, settings, activeSample, toCanvas, plot, xMin, xMax, yMin, yMax);
     }
 
@@ -555,7 +570,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleModeChange() {
-    if (controls.mode.value !== "p-value") {
+    if (!isConformalRadiusMode(controls.mode.value)) {
       clearSampleSelection();
     }
     scheduleRender();
@@ -777,6 +792,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function pointsAlmostEqual(a, b) {
     return Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.005;
+  }
+
+  function isConformalRadiusMode(mode) {
+    return mode === "p-value" || mode === "e-value";
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
   }
 
   function makeNormalPairs(count, seed) {
