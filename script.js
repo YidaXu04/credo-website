@@ -46,6 +46,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const sampleCountMax = 150;
+  const demoColors = {
+    feasibleFill: "rgba(103, 112, 108, 0.20)",
+    feasibleStroke: "#1f2421",
+    vertexFill: "#37413d",
+    selectedFill: "#b26a2c",
+    selectedRing: "rgba(178, 106, 44, 0.28)",
+    selectedText: "#8b4d1e",
+    distributionCore: "rgba(47, 120, 200, 0.13)",
+    distributionMiddle: "rgba(47, 120, 200, 0.055)",
+    distributionEdge: "rgba(47, 120, 200, 0)",
+    inverseFill: "rgba(126, 143, 151, 0.18)",
+    inverseBoundary: "rgba(83, 102, 111, 0.86)",
+    nearOptimal: "#285c4d",
+    notNearOptimal: "#b84d3f"
+  };
   let generatedSampleSeed = 24591;
   let generatedSamplePairs = makeNormalPairs(sampleCountMax, generatedSampleSeed);
   const trueRiskSamples = makeNormalPairs(10000, 982451);
@@ -376,9 +391,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineTo(triangle[1][0], triangle[1][1]);
     ctx.lineTo(triangle[2][0], triangle[2][1]);
     ctx.closePath();
-    ctx.fillStyle = "rgba(40, 92, 77, 0.12)";
+    ctx.fillStyle = demoColors.feasibleFill;
     ctx.fill();
-    ctx.strokeStyle = "#285c4d";
+    ctx.strokeStyle = demoColors.feasibleStroke;
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -386,7 +401,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const [x, y] = toCanvas(vertex.point);
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#285c4d";
+      ctx.fillStyle = demoColors.vertexFill;
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#ffffff";
@@ -400,13 +415,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const [zx, zy] = toCanvas(z);
     ctx.beginPath();
     ctx.arc(zx, zy, 9, 0, Math.PI * 2);
-    ctx.fillStyle = "#b26a2c";
+    ctx.fillStyle = demoColors.selectedFill;
     ctx.fill();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(178, 106, 44, 0.28)";
+    ctx.strokeStyle = demoColors.selectedRing;
     ctx.stroke();
 
-    ctx.fillStyle = "#8b4d1e";
+    ctx.fillStyle = demoColors.selectedText;
     ctx.font = "700 13px Arial, Helvetica, sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(`z = ${formatPoint(z)}`, Math.min(zx + 12, plot.right - 92), Math.max(zy - 12, plot.top + 16));
@@ -428,6 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, chooseGridStep(extent));
+    drawOutcomeDistribution(ctx, plot, samples, toCanvas);
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
@@ -445,7 +461,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       ctx.beginPath();
       ctx.arc(x, y, index === getActiveSampleIndex() ? 6 : 4.3, 0, Math.PI * 2);
-      ctx.fillStyle = inside ? "#285c4d" : "#b84d3f";
+      ctx.fillStyle = inside ? demoColors.nearOptimal : demoColors.notNearOptimal;
       ctx.fill();
       ctx.lineWidth = index === getActiveSampleIndex() ? 2.4 : 1.3;
       ctx.strokeStyle = index === getActiveSampleIndex() ? "#b26a2c" : "#ffffff";
@@ -453,9 +469,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function drawOutcomeDistribution(ctx, plot, samples, toCanvas) {
+    ctx.save();
+    samples.forEach((sample) => {
+      const [x, y] = toCanvas(sample);
+      if (!pointInPlot(x, y, plot)) {
+        return;
+      }
+      const radius = 30;
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, demoColors.distributionCore);
+      gradient.addColorStop(0.52, demoColors.distributionMiddle);
+      gradient.addColorStop(1, demoColors.distributionEdge);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
   function shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings) {
     const step = 5;
-    ctx.fillStyle = "rgba(69, 132, 156, 0.18)";
+    ctx.fillStyle = demoColors.inverseFill;
     for (let py = plot.top; py < plot.bottom; py += step) {
       for (let px = plot.left; px < plot.right; px += step) {
         const y = [
@@ -473,7 +509,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.save();
     ctx.setLineDash([6, 5]);
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "rgba(40, 92, 77, 0.78)";
+    ctx.strokeStyle = demoColors.inverseBoundary;
 
     vertices.forEach((vertex) => {
       const a = [settings.z[0] - vertex.point[0], settings.z[1] - vertex.point[1]];
