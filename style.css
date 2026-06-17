@@ -12,7 +12,10 @@
   --shadow: 0 16px 42px rgba(23, 33, 28, 0.09);
   --container-max: 1120px;
   --container-pad: 24px;
-  --nav-offset: 96px;
+  --header-height: 68px;
+  --section-block-padding: 84px;
+  --anchor-gap: 20px;
+  --nav-offset: max(0px, calc(var(--header-height) + var(--anchor-gap) - var(--section-block-padding)));
 }
 
 * {
@@ -36,6 +39,21 @@ a {
   color: inherit;
 }
 
+.nav,
+.hero,
+.section,
+.footer,
+.question-wrap {
+  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
+  margin-right: auto;
+  margin-left: auto;
+}
+
+section[id],
+main[id] {
+  scroll-margin-top: var(--nav-offset);
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -46,8 +64,6 @@ a {
 }
 
 .nav {
-  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
-  margin: 0 auto;
   min-height: 68px;
   display: flex;
   align-items: center;
@@ -83,8 +99,6 @@ a {
 }
 
 .hero {
-  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
-  margin: 0 auto;
   padding: 96px 0 70px;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
@@ -231,15 +245,12 @@ h3 {
 }
 
 .section {
-  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
-  margin: 0 auto;
-  padding: 84px 0;
+  padding: var(--section-block-padding) 0;
   border-top: 1px solid var(--line);
-  scroll-margin-top: var(--nav-offset);
 }
 
 .section.compact {
-  max-width: 980px;
+  max-width: none;
 }
 
 .section-heading {
@@ -287,8 +298,7 @@ h3 {
 
 .paper-figure {
   width: 100%;
-  max-width: 980px;
-  margin: 48px auto 0;
+  margin: 48px 0 0;
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -297,7 +307,6 @@ h3 {
 }
 
 .paper-figure.wide {
-  max-width: 980px;
   margin-top: 48px;
 }
 
@@ -350,14 +359,13 @@ h3 {
 .accent {
   width: 100%;
   max-width: none;
-  padding: 90px var(--container-pad);
+  padding: 90px 0;
   background: var(--accent-dark);
   border-top: 0;
 }
 
 .question-wrap {
-  width: min(980px, 100%);
-  margin: 0 auto;
+  max-width: var(--container-max);
 }
 
 .accent .eyebrow {
@@ -878,8 +886,6 @@ mjx-container {
 }
 
 .footer {
-  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
-  margin: 0 auto;
   padding: 30px 0 44px;
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -899,15 +905,7 @@ mjx-container {
 
 @media (max-width: 820px) {
   :root {
-    --nav-offset: 136px;
-  }
-
-  html {
-    scroll-padding-top: var(--nav-offset);
-  }
-
-  .section {
-    scroll-margin-top: var(--nav-offset);
+    --header-height: 124px;
   }
 
   .nav {
@@ -953,6 +951,7 @@ mjx-container {
 @media (max-width: 560px) {
   :root {
     --container-pad: 18px;
+    --section-block-padding: 54px;
   }
 
   .hero {
@@ -960,11 +959,11 @@ mjx-container {
   }
 
   .section {
-    padding: 54px 0;
+    padding: var(--section-block-padding) 0;
   }
 
   .accent {
-    padding: 64px var(--container-pad);
+    padding: 64px 0;
   }
 
   .button {
