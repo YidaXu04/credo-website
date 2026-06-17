@@ -171,12 +171,14 @@
       <div class="demo-shell" data-credo-demo>
         <form class="demo-controls" aria-label="Interactive CREDO demo controls">
           <label class="control-group" for="demo-z">
-            <span>Candidate decision \( z \)</span>
+            <span>Candidate preset \( z \)</span>
             <select id="demo-z" name="z">
               <option value="0">(0,0)</option>
               <option value="1">(1,0)</option>
               <option value="2">(0,1)</option>
+              <option value="custom">Dragged custom point</option>
             </select>
+            <output id="demo-z-value" for="demo-z">(0.00, 0.00)</output>
           </label>
 
           <label class="control-group" for="demo-sigma">
@@ -210,7 +212,7 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Decision space</h3>
-              <p>\( \mathcal{Z} = \mathrm{conv}\{(0,0),(1,0),(0,1)\} \)</p>
+              <p>Drag \( z \) inside \( \mathcal{Z} = \mathrm{conv}\{(0,0),(1,0),(0,1)\} \).</p>
             </div>
             <canvas id="decision-canvas" width="480" height="360" aria-label="Triangle feasible region and selected candidate decision"></canvas>
             <div class="demo-legend" aria-label="Decision space legend">
@@ -231,7 +233,7 @@
               <span><i class="legend-swatch inverse"></i>\( \pi^{-1}_{\epsilon}(z) \)</span>
             </div>
             <p class="outcome-note" id="outcome-radius-note" hidden>
-              Circles show a subset of conformal-style balls for visualization; all generated samples are still used in the risk estimate.
+              Hover or click a generated sample to inspect its conformal-style inner ball.
             </p>
           </article>
 
@@ -244,9 +246,13 @@
               <span id="risk-value">0.00</span>
               <small>\( \widehat{\alpha}(z) \)</small>
             </div>
+            <div class="risk-true" aria-live="polite">
+              <strong>Approx. true risk under simulated distribution</strong>
+              <span id="true-risk-value">0.00</span>
+            </div>
             <div class="risk-bars" id="risk-bars" aria-label="Risk estimates for all candidate decisions"></div>
             <p class="risk-explainer">
-              Lower risk means more generated outcomes keep the prescribed decision inside its inverse feasible region. Higher risk means the decision more often fails the near-optimality audit under the simulated uncertainty.
+              Lower risk means more generated outcomes keep the prescribed decision inside its inverse feasible region. The approximate true risk is computed from a large simulated sample and is shown only for intuition. The full CREDO framework is designed to provide conservative risk estimates under its assumptions.
             </p>
           </article>
         </div>
