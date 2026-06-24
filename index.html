@@ -163,9 +163,9 @@
     <section id="interactive-demo" class="section demo-section">
       <div class="section-heading">
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
-        <h2>Audit a candidate decision in a triangular linear program</h2>
+        <h2>Audit a candidate decision in an editable 2D linear program</h2>
         <p class="lead">
-          Explore the LP \( \min_{z \in \mathcal{Z}} \langle y, z \rangle \), where \( \mathcal{Z} \) is the triangle with vertices \( (0,0) \), \( (1,0) \), and \( (0,1) \). The shaded outcome-space region approximates \( \pi^{-1}_{\epsilon}(z) \), the outcomes for which the selected decision remains near-optimal.
+          Explore the LP \( \min_{z \in \mathcal{Z}} \langle y, z \rangle \), where \( \mathcal{Z} \) is an editable 2D feasible region initialized as the triangle with vertices \( (0,0) \), \( (1,0) \), and \( (0,1) \). Drag the selected decision \( z \) or the feasible-region boundary vertices to see how \( \pi^{-1}_{\epsilon}(z) \), the outcomes for which the selected decision remains near-optimal, changes.
         </p>
       </div>
 
@@ -175,12 +175,17 @@
             <label class="control-group" for="demo-z">
               <span>Candidate preset \( z \)</span>
               <select id="demo-z" name="z">
-                <option value="0">(0,0)</option>
-                <option value="1">(1,0)</option>
-                <option value="2">(0,1)</option>
+                <option value="first">First boundary vertex</option>
+                <option value="center">Center point</option>
                 <option value="custom">Dragged custom point</option>
               </select>
               <output class="control-helper" id="demo-z-value" for="demo-z">Current z: (0.00, 0.00)</output>
+            </label>
+
+            <label class="control-group" for="demo-vertex-count">
+              <span>Number of boundary vertices</span>
+              <input id="demo-vertex-count" name="vertex-count" type="range" min="1" max="10" step="1" value="3">
+              <output id="demo-vertex-count-value" for="demo-vertex-count">3</output>
             </label>
 
             <label class="control-group" for="demo-sample-pattern">
@@ -233,13 +238,13 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Decision space</h3>
-              <p>Drag \( z \) inside \( \mathcal{Z} = \mathrm{conv}\{(0,0),(1,0),(0,1)\} \).</p>
+              <p>Drag \( z \) or the editable boundary vertices that define \( \mathcal{Z} \).</p>
             </div>
-            <canvas id="decision-canvas" width="480" height="360" aria-label="Triangle feasible region and selected candidate decision"></canvas>
+            <canvas id="decision-canvas" width="480" height="360" aria-label="Editable feasible region and selected candidate decision"></canvas>
             <div class="demo-legend" aria-label="Decision space legend">
               <span><i class="legend-swatch feasible"></i>Feasible region \( \mathcal{Z} \)</span>
               <span><i class="legend-dot selected"></i>Selected \( z \)</span>
-              <span><i class="legend-dot vertex"></i>Candidate vertex</span>
+              <span><i class="legend-dot vertex"></i>Editable boundary vertex</span>
             </div>
           </article>
 
@@ -250,7 +255,7 @@
             </div>
             <canvas id="outcome-canvas" width="560" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
             <div class="demo-legend" aria-label="Outcome space legend">
-              <span><i class="legend-swatch distribution"></i>Simulated outcome distribution</span>
+              <span><i class="legend-swatch distribution"></i>Ground-truth simulated outcome density</span>
               <span><i class="legend-swatch inverse"></i>Inverse feasible region \( \pi^{-1}_{\epsilon}(z) \)</span>
               <span><i class="legend-dot inside"></i>Near-optimal</span>
               <span><i class="legend-dot outside"></i>Not near-optimal</span>

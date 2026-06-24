@@ -497,9 +497,9 @@ mjx-container {
 
 .demo-controls {
   display: grid;
-  gap: 16px;
+  gap: 18px;
   margin-bottom: 18px;
-  padding: 18px;
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.74);
@@ -507,13 +507,13 @@ mjx-container {
 
 .demo-control-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(230px, 1fr));
+  gap: 18px 22px;
   align-items: start;
 }
 
 .control-group {
-  min-width: 0;
+  min-width: 230px;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px 10px;
@@ -528,19 +528,43 @@ mjx-container {
   color: var(--accent-dark);
   font-size: 0.82rem;
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.3;
 }
 
 .control-group select,
-.control-group input[type="range"] {
+.control-group input[type="range"],
+.control-group span {
   grid-column: 1 / -1;
+}
+
+.control-group:has(input[type="range"]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.control-group:has(input[type="range"]) input[type="range"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.control-group:has(input[type="range"]) output {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 46px;
+  padding-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-group[for="demo-mode"] {
+  grid-column: 1 / -1;
+  max-width: 360px;
 }
 
 .demo-action-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-top: 14px;
+  gap: 16px;
+  padding-top: 16px;
   border-top: 1px solid rgba(216, 224, 218, 0.88);
 }
 
@@ -574,6 +598,7 @@ mjx-container {
 
 .control-group select {
   width: 100%;
+  min-width: 0;
   min-height: 40px;
   padding: 0 34px 0 11px;
   border: 1px solid #b9c7bf;
@@ -910,7 +935,21 @@ mjx-container {
 
 @media (max-width: 1040px) {
   .demo-control-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(230px, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .demo-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .control-group {
+    min-width: 0;
+  }
+
+  .control-group[for="demo-mode"] {
+    max-width: none;
   }
 }
 
@@ -939,7 +978,6 @@ mjx-container {
 
   .two-column,
   .cards,
-  .demo-control-grid,
   .demo-grid,
   .risk-panel {
     grid-template-columns: 1fr;
