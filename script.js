@@ -6,15 +6,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const vertices = [
-    { label: "(0,0)", point: [0, 0] },
-    { label: "(1,0)", point: [1, 0] },
-    { label: "(0,1)", point: [0, 1] }
+  const defaultVertices = [
+    [0, 0],
+    [1, 0],
+    [0, 1]
   ];
+  let boundaryVertices = makeBoundaryVertices(3);
 
   const controls = {
     z: document.getElementById("demo-z"),
     zValue: document.getElementById("demo-z-value"),
+    vertexCount: document.getElementById("demo-vertex-count"),
+    vertexCountValue: document.getElementById("demo-vertex-count-value"),
     samplePattern: document.getElementById("demo-sample-pattern"),
     resample: document.getElementById("demo-resample"),
     sigma: document.getElementById("demo-sigma"),
@@ -66,22 +69,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
-  let selectedZ = vertices[0].point.slice();
+  let selectedZ = boundaryVertices[0].slice();
   let scheduled = false;
-  let draggingDecision = false;
+  let dragTarget = null;
   let hoverSampleIndex = null;
   let pinnedSampleIndex = null;
   let currentDecisionView = null;
   let currentOutcomeView = null;
 
   controls.z.addEventListener("change", () => {
-    const preset = vertices[Number.parseInt(controls.z.value, 10)];
-    if (preset) {
-      selectedZ = preset.point.slice();
-      syncPresetSelect();
-      scheduleRender();
+    if (controls.z.value === "first") {
+      selectedZ = boundaryVertices[0].slice();
+    } else if (controls.z.value === "center") {
+      selectedZ = getPolygonCenter(boundaryVertices);
+    } else {
+      return;
     }
+    syncPresetSelect();
+    scheduleRender();
   });
+
+  controls.vertexCount.addEventListener("input", handleVertexCountChange);
+  controls.vertexCount.addEventListener("change", handleVertexCountChange);
 
   [controls.sigma, controls.k, controls.epsilon].forEach((control) => {
     control.addEventListener("input", scheduleRender);
@@ -104,24 +113,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentDecisionView) {
       return;
     }
-    draggingDecision = true;
+    dragTarget = getDecisionDragTarget(event);
     decisionCanvas.classList.add("is-dragging");
     decisionCanvas.setPointerCapture(event.pointerId);
-    updateSelectedDecisionFromEvent(event);
+    updateDecisionDragFromEvent(event);
   });
 
   decisionCanvas.addEventListener("pointermove", (event) => {
-    if (draggingDecision) {
-      updateSelectedDecisionFromEvent(event);
+    if (dragTarget) {
+      updateDecisionDragFromEvent(event);
     }
   });
 
   ["pointerup", "pointercancel"].forEach((eventName) => {
     decisionCanvas.addEventListener(eventName, (event) => {
-      if (!draggingDecision) {
+      if (!dragTarget) {
         return;
       }
-      draggingDecision = false;
+      dragTarget = null;
       decisionCanvas.classList.remove("is-dragging");
       if (decisionCanvas.hasPointerCapture(event.pointerId)) {
         decisionCanvas.releasePointerCapture(event.pointerId);
@@ -174,8 +183,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
-    const presetRisks = vertices.map((vertex) => {
-      return estimateRisk(vertex.point, samples, residuals, settings);
+    const presetRisks = boundaryVertices.map((vertex) => {
+      return estimateRisk(vertex, samples, residuals, settings);
     });
     const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
 
@@ -194,8 +203,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function readSettings() {
+    selectedZ = projectToFeasibleRegion(selectedZ);
     return {
       z: selectedZ.slice(),
+      feasibleVertices: getFeasibleVertices(),
       samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
@@ -206,6 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateOutputs(settings) {
     controls.zValue.textContent = `Current z: ${formatPoint(settings.z)}`;
+    controls.vertexCountValue.value = String(boundaryVertices.length);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
@@ -229,12 +241,16 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (!isNearOptimal(settings.z, sample, settings.epsilon)) {
+    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices)) {
       outcomeRadiusNote.textContent = "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
       return;
     }
 
-    const radius = distanceToBoundary(settings.z, sample, settings.epsilon);
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings.feasibleVertices);
+    if (!Number.isFinite(radius)) {
+      outcomeRadiusNote.textContent = "The current degenerate feasible region makes this inverse region unbounded for every generated outcome.";
+      return;
+    }
     if (radius <= 1e-4) {
       outcomeRadiusNote.textContent = "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
       return;
@@ -297,15 +313,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return y[0] * z[0] + y[1] * z[1];
   }
 
-  function isNearOptimal(z, y, epsilon) {
-    const best = Math.min(...vertices.map((vertex) => objective(y, vertex.point)));
+  function isNearOptimal(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
+    if (feasibleVertices.length === 0) {
+      return false;
+    }
+    const best = Math.min(...feasibleVertices.map((vertex) => objective(y, vertex)));
     return objective(y, z) <= best + epsilon + 1e-10;
   }
 
-  function halfspaceMargins(z, y, epsilon) {
-    return vertices
+  function halfspaceMargins(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
+    return feasibleVertices
       .map((vertex) => {
-        const a = [z[0] - vertex.point[0], z[1] - vertex.point[1]];
+        const a = [z[0] - vertex[0], z[1] - vertex[1]];
         const norm = Math.hypot(a[0], a[1]);
         if (norm < 1e-10) {
           return null;
@@ -316,8 +335,8 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((margin) => margin !== null);
   }
 
-  function distanceToBoundary(z, y, epsilon) {
-    const margins = halfspaceMargins(z, y, epsilon);
+  function distanceToBoundary(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
+    const margins = halfspaceMargins(z, y, epsilon, feasibleVertices);
     if (margins.length === 0) {
       return Number.POSITIVE_INFINITY;
     }
@@ -331,7 +350,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function estimateSampleRisk(z, sample, residuals, settings) {
-    if (!isNearOptimal(z, sample, settings.epsilon)) {
+    if (!isNearOptimal(z, sample, settings.epsilon, settings.feasibleVertices)) {
       return 1;
     }
 
@@ -339,8 +358,11 @@ document.addEventListener("DOMContentLoaded", () => {
       return 0;
     }
 
-    const distance = distanceToBoundary(z, sample, settings.epsilon);
-    if (distance <= 1e-9 || !Number.isFinite(distance)) {
+    const distance = distanceToBoundary(z, sample, settings.epsilon, settings.feasibleVertices);
+    if (!Number.isFinite(distance)) {
+      return 0;
+    }
+    if (distance <= 1e-9) {
       return 1;
     }
 
@@ -361,7 +383,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let failures = 0;
     trueRiskSamples.forEach(([a, b], index) => {
       const sample = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
-      if (!isNearOptimal(z, sample, settings.epsilon)) {
+      if (!isNearOptimal(z, sample, settings.epsilon, settings.feasibleVertices)) {
         failures += 1;
       }
     });
@@ -379,26 +401,37 @@ document.addEventListener("DOMContentLoaded", () => {
     const yMax = 1.15;
     const toCanvas = makeProjector(plot, xMin, xMax, yMin, yMax);
     const fromCanvas = makeInverseProjector(plot, xMin, xMax, yMin, yMax);
-    currentDecisionView = { fromCanvas };
+    currentDecisionView = { toCanvas, fromCanvas, plot, xMin, xMax, yMin, yMax };
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, 0.25);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z₁", "z₂");
 
-    const triangle = vertices.map((vertex) => toCanvas(vertex.point));
+    const polygon = boundaryVertices.map((vertex) => toCanvas(vertex));
     ctx.beginPath();
-    ctx.moveTo(triangle[0][0], triangle[0][1]);
-    ctx.lineTo(triangle[1][0], triangle[1][1]);
-    ctx.lineTo(triangle[2][0], triangle[2][1]);
-    ctx.closePath();
-    ctx.fillStyle = demoColors.feasibleFill;
-    ctx.fill();
-    ctx.strokeStyle = demoColors.feasibleStroke;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (polygon.length === 1) {
+      ctx.arc(polygon[0][0], polygon[0][1], 8, 0, Math.PI * 2);
+      ctx.fillStyle = demoColors.feasibleFill;
+      ctx.fill();
+    } else if (polygon.length === 2) {
+      ctx.moveTo(polygon[0][0], polygon[0][1]);
+      ctx.lineTo(polygon[1][0], polygon[1][1]);
+      ctx.strokeStyle = demoColors.feasibleStroke;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else if (polygon.length > 2) {
+      ctx.moveTo(polygon[0][0], polygon[0][1]);
+      polygon.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.fillStyle = demoColors.feasibleFill;
+      ctx.fill();
+      ctx.strokeStyle = demoColors.feasibleStroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
 
-    vertices.forEach((vertex) => {
-      const [x, y] = toCanvas(vertex.point);
+    boundaryVertices.forEach((vertex, index) => {
+      const [x, y] = toCanvas(vertex);
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fillStyle = demoColors.vertexFill;
@@ -409,7 +442,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.fillStyle = "#17211c";
       ctx.font = "13px Arial, Helvetica, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(vertex.label, x, y - 15);
+      ctx.fillText(`v${index + 1}`, x, y - 15);
     });
 
     const [zx, zy] = toCanvas(z);
@@ -443,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, chooseGridStep(extent));
-    drawOutcomeDistribution(ctx, plot, samples, toCanvas);
+    drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings);
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
     drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
@@ -455,7 +488,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     samples.forEach((sample, index) => {
       const [x, y] = toCanvas(sample);
-      const inside = isNearOptimal(settings.z, sample, settings.epsilon);
+      const inside = isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices);
       if (!pointInPlot(x, y, plot)) {
         return;
       }
@@ -469,24 +502,72 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function drawOutcomeDistribution(ctx, plot, samples, toCanvas) {
-    ctx.save();
-    samples.forEach((sample) => {
-      const [x, y] = toCanvas(sample);
-      if (!pointInPlot(x, y, plot)) {
-        return;
+  function drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings) {
+    const densityWidth = 96;
+    const densityHeight = 72;
+    const densities = new Float64Array(densityWidth * densityHeight);
+    let maxDensity = 0;
+
+    for (let row = 0; row < densityHeight; row += 1) {
+      for (let col = 0; col < densityWidth; col += 1) {
+        const x = xMin + ((col + 0.5) / densityWidth) * (xMax - xMin);
+        const y = yMax - ((row + 0.5) / densityHeight) * (yMax - yMin);
+        const density = outcomeDensityAt(x, y, settings.sigma, settings.samplePattern);
+        const index = row * densityWidth + col;
+        densities[index] = density;
+        maxDensity = Math.max(maxDensity, density);
       }
-      const radius = 30;
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      gradient.addColorStop(0, demoColors.distributionCore);
-      gradient.addColorStop(0.52, demoColors.distributionMiddle);
-      gradient.addColorStop(1, demoColors.distributionEdge);
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    }
+
+    ctx.save();
+    for (let row = 0; row < densityHeight; row += 1) {
+      for (let col = 0; col < densityWidth; col += 1) {
+        const density = densities[row * densityWidth + col];
+        if (maxDensity <= 0 || density <= 0) {
+          continue;
+        }
+        const intensity = Math.sqrt(density / maxDensity);
+        const alpha = 0.03 + 0.28 * intensity;
+        const x = plot.left + (col / densityWidth) * (plot.right - plot.left);
+        const y = plot.top + (row / densityHeight) * (plot.bottom - plot.top);
+        const cellWidth = (plot.right - plot.left) / densityWidth + 1;
+        const cellHeight = (plot.bottom - plot.top) / densityHeight + 1;
+        ctx.fillStyle = `rgba(47, 120, 200, ${alpha.toFixed(3)})`;
+        ctx.fillRect(x, y, cellWidth, cellHeight);
+      }
+    }
     ctx.restore();
+  }
+
+  function outcomeDensityAt(x, y, sigma, samplePattern) {
+    if (samplePattern === "mixture") {
+      const spread = Math.max(0.05, sigma * 0.52);
+      const covariance = covarianceFromTransform(spread, 0.72, 0.1, 0.15, 0.68);
+      return 0.5 * bivariateNormalDensity(x, y, -0.09, 0.48, covariance)
+        + 0.5 * bivariateNormalDensity(x, y, 0.62, -0.03, covariance);
+    }
+
+    const sigmaScale = getSamplePatternSigmaScale(samplePattern);
+    const covariance = covarianceFromTransform(sigma * sigmaScale, 0.88, 0.18, 0.3, 0.78);
+    const meanX = samplePattern === "shifted" ? 0.52 : 0.18;
+    const meanY = samplePattern === "shifted" ? 0.01 : 0.04;
+    return bivariateNormalDensity(x, y, meanX, meanY, covariance);
+  }
+
+  function covarianceFromTransform(scale, a11, a12, a21, a22) {
+    return {
+      xx: scale * scale * (a11 * a11 + a12 * a12),
+      xy: scale * scale * (a11 * a21 + a12 * a22),
+      yy: scale * scale * (a21 * a21 + a22 * a22)
+    };
+  }
+
+  function bivariateNormalDensity(x, y, meanX, meanY, covariance) {
+    const dx = x - meanX;
+    const dy = y - meanY;
+    const det = Math.max(1e-12, covariance.xx * covariance.yy - covariance.xy * covariance.xy);
+    const exponent = -0.5 * (covariance.yy * dx * dx - 2 * covariance.xy * dx * dy + covariance.xx * dy * dy) / det;
+    return Math.exp(exponent) / (2 * Math.PI * Math.sqrt(det));
   }
 
   function shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings) {
@@ -498,7 +579,7 @@ document.addEventListener("DOMContentLoaded", () => {
           xMin + ((px - plot.left) / (plot.right - plot.left)) * (xMax - xMin),
           yMax - ((py - plot.top) / (plot.bottom - plot.top)) * (yMax - yMin)
         ];
-        if (isNearOptimal(settings.z, y, settings.epsilon)) {
+        if (isNearOptimal(settings.z, y, settings.epsilon, settings.feasibleVertices)) {
           ctx.fillRect(px, py, step + 1, step + 1);
         }
       }
@@ -511,8 +592,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = demoColors.inverseBoundary;
 
-    vertices.forEach((vertex) => {
-      const a = [settings.z[0] - vertex.point[0], settings.z[1] - vertex.point[1]];
+    settings.feasibleVertices.forEach((vertex) => {
+      const a = [settings.z[0] - vertex[0], settings.z[1] - vertex[1]];
       if (Math.hypot(a[0], a[1]) < 1e-10) {
         return;
       }
@@ -532,11 +613,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax, yMin, yMax) {
-    if (!isNearOptimal(settings.z, sample, settings.epsilon)) {
+    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices)) {
       return;
     }
 
-    const radius = distanceToBoundary(settings.z, sample, settings.epsilon);
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings.feasibleVertices);
     if (radius <= 1e-4 || !Number.isFinite(radius)) {
       return;
     }
@@ -566,8 +647,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const rows = [
       { label: `selected ${formatPoint(settings.z)}`, risk: selectedRisk, selected: true },
-      ...vertices.map((vertex, index) => ({
-        label: `preset ${vertex.label}`,
+      ...boundaryVertices.map((vertex, index) => ({
+        label: `boundary v${index + 1} ${formatPoint(vertex)}`,
         risk: presetRisks[index],
         selected: false
       }))
@@ -597,12 +678,44 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function updateSelectedDecisionFromEvent(event) {
+  function updateDecisionDragFromEvent(event) {
     const [x, y] = getCanvasPoint(decisionCanvas, event);
-    selectedZ = projectToTriangle(currentDecisionView.fromCanvas([x, y]));
+    const point = clampPointToDecisionView(currentDecisionView.fromCanvas([x, y]));
+    if (dragTarget && dragTarget.type === "vertex") {
+      boundaryVertices[dragTarget.index] = constrainBoundaryVertexDrag(dragTarget.index, point);
+      selectedZ = projectToFeasibleRegion(selectedZ);
+    } else {
+      selectedZ = projectToFeasibleRegion(point);
+    }
     syncPresetSelect();
     scheduleRender();
     event.preventDefault();
+  }
+
+  function getDecisionDragTarget(event) {
+    const [pointerX, pointerY] = getCanvasPoint(decisionCanvas, event);
+    let nearestVertex = null;
+    let nearestVertexDistance = Number.POSITIVE_INFINITY;
+
+    boundaryVertices.forEach((vertex, index) => {
+      const [x, y] = currentDecisionView.toCanvas(vertex);
+      const distance = Math.hypot(pointerX - x, pointerY - y);
+      if (distance < nearestVertexDistance) {
+        nearestVertexDistance = distance;
+        nearestVertex = index;
+      }
+    });
+
+    const [zx, zy] = currentDecisionView.toCanvas(selectedZ);
+    if (Math.hypot(pointerX - zx, pointerY - zy) <= 12) {
+      return { type: "selected" };
+    }
+
+    if (nearestVertex !== null && nearestVertexDistance <= 14) {
+      return { type: "vertex", index: nearestVertex };
+    }
+
+    return { type: "selected" };
   }
 
   function handleModeChange() {
@@ -613,6 +726,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleSamplePatternChange() {
+    clearSampleSelection();
+    scheduleRender();
+  }
+
+  function handleVertexCountChange() {
+    setVertexCount(Number.parseInt(controls.vertexCount.value, 10));
     clearSampleSelection();
     scheduleRender();
   }
@@ -650,26 +769,265 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function syncPresetSelect() {
-    const presetIndex = vertices.findIndex((vertex) => pointsAlmostEqual(selectedZ, vertex.point));
-    controls.z.value = presetIndex === -1 ? "custom" : String(presetIndex);
+    if (pointsAlmostEqual(selectedZ, boundaryVertices[0])) {
+      controls.z.value = "first";
+    } else if (pointsAlmostEqual(selectedZ, getPolygonCenter(boundaryVertices))) {
+      controls.z.value = "center";
+    } else {
+      controls.z.value = "custom";
+    }
   }
 
-  function projectToTriangle(point) {
-    const [x, y] = point;
-    if (x >= 0 && y >= 0 && x + y <= 1) {
-      return [x, y];
+  function setVertexCount(count) {
+    const targetCount = Math.max(1, Math.min(10, count || 3));
+    boundaryVertices = makeBoundaryVertices(targetCount);
+    controls.vertexCount.value = String(targetCount);
+    controls.vertexCountValue.value = String(targetCount);
+    selectedZ = projectToFeasibleRegion(selectedZ);
+    syncPresetSelect();
+  }
+
+  function makeBoundaryVertices(count) {
+    if (count <= 1) {
+      return [defaultVertices[0].slice()];
+    }
+    if (count === 2) {
+      return [defaultVertices[0].slice(), defaultVertices[1].slice()];
+    }
+    if (count === 3) {
+      return defaultVertices.map((point) => point.slice());
     }
 
-    const edges = [
-      [vertices[0].point, vertices[1].point],
-      [vertices[1].point, vertices[2].point],
-      [vertices[2].point, vertices[0].point]
-    ];
-    return edges
+    const center = [0.5, 0.5];
+    const radius = 0.58;
+    const startAngle = -Math.PI / 2;
+    return Array.from({ length: count }, (_, index) => {
+      const angle = startAngle + (index / count) * Math.PI * 2;
+      return [
+        center[0] + radius * Math.cos(angle),
+        center[1] + radius * Math.sin(angle)
+      ];
+    });
+  }
+
+  function getFeasibleVertices() {
+    return boundaryVertices.map((vertex) => vertex.slice());
+  }
+
+  function projectToFeasibleRegion(point) {
+    const feasibleVertices = getFeasibleVertices();
+    if (feasibleVertices.length === 0) {
+      return point.slice();
+    }
+    if (feasibleVertices.length === 1) {
+      return feasibleVertices[0].slice();
+    }
+    if (feasibleVertices.length === 2) {
+      return projectToSegment(point, feasibleVertices[0], feasibleVertices[1]);
+    }
+    if (pointInConvexPolygon(point, feasibleVertices)) {
+      return point.slice();
+    }
+
+    return getPolygonEdges(feasibleVertices)
       .map(([a, b]) => projectToSegment(point, a, b))
       .sort((a, b) => {
         return squaredDistance(point, a) - squaredDistance(point, b);
       })[0];
+  }
+
+  function constrainBoundaryVertexDrag(index, point) {
+    const current = boundaryVertices[index].slice();
+    const vertexCount = boundaryVertices.length;
+    const candidatePoint = clampPointToDecisionView(point);
+
+    if (vertexCount === 1) {
+      return candidatePoint;
+    }
+
+    if (vertexCount === 2) {
+      const other = boundaryVertices[index === 0 ? 1 : 0];
+      if (Math.hypot(candidatePoint[0] - other[0], candidatePoint[1] - other[1]) >= 0.08) {
+        return candidatePoint;
+      }
+      const fallbackDirection = Math.hypot(current[0] - other[0], current[1] - other[1]) < 1e-9
+        ? [index === 0 ? -1 : 1, 0]
+        : normalizeVector([current[0] - other[0], current[1] - other[1]]);
+      return clampPointToDecisionView([
+        other[0] + fallbackDirection[0] * 0.08,
+        other[1] + fallbackDirection[1] * 0.08
+      ]);
+    }
+
+    const center = getPolygonCenter(boundaryVertices);
+    const previous = boundaryVertices[(index - 1 + vertexCount) % vertexCount];
+    const next = boundaryVertices[(index + 1) % vertexCount];
+    const currentAngle = Math.atan2(current[1] - center[1], current[0] - center[0]);
+    const previousAngle = unwrapAngleBefore(Math.atan2(previous[1] - center[1], previous[0] - center[0]), currentAngle);
+    const nextAngle = unwrapAngleAfter(Math.atan2(next[1] - center[1], next[0] - center[0]), currentAngle);
+    const sectorWidth = nextAngle - previousAngle;
+    const margin = Math.min(0.12, sectorWidth * 0.22);
+    const minAngle = previousAngle + margin;
+    const maxAngle = nextAngle - margin;
+    const rawAngle = unwrapAngleNear(Math.atan2(candidatePoint[1] - center[1], candidatePoint[0] - center[0]), currentAngle);
+    const angle = clamp(rawAngle, minAngle, maxAngle);
+    const direction = [Math.cos(angle), Math.sin(angle)];
+    const minRadius = 0.12;
+    const maxRadius = Math.max(minRadius, maxRadiusToDecisionView(center, direction) - 0.01);
+    const rawRadius = Math.hypot(candidatePoint[0] - center[0], candidatePoint[1] - center[1]);
+    const targetRadius = clamp(rawRadius, minRadius, maxRadius);
+
+    const directCandidate = pointFromPolar(center, angle, targetRadius);
+    if (isValidBoundaryPolygon(replacePoint(boundaryVertices, index, directCandidate))) {
+      return directCandidate;
+    }
+
+    for (let step = 1; step <= 24; step += 1) {
+      const radius = targetRadius + ((maxRadius - targetRadius) * step) / 24;
+      const outwardCandidate = pointFromPolar(center, angle, radius);
+      if (isValidBoundaryPolygon(replacePoint(boundaryVertices, index, outwardCandidate))) {
+        return outwardCandidate;
+      }
+    }
+
+    return current;
+  }
+
+  function isValidBoundaryPolygon(vertices) {
+    if (vertices.length <= 1) {
+      return true;
+    }
+    if (vertices.length === 2) {
+      return Math.hypot(vertices[0][0] - vertices[1][0], vertices[0][1] - vertices[1][1]) >= 0.08;
+    }
+    if (polygonArea(vertices) <= 0.01) {
+      return false;
+    }
+    return vertices.every((vertex, index) => {
+      const previous = vertices[(index - 1 + vertices.length) % vertices.length];
+      const next = vertices[(index + 1) % vertices.length];
+      return crossProduct(previous, vertex, next) > 1e-4;
+    });
+  }
+
+  function replacePoint(points, index, point) {
+    return points.map((candidate, candidateIndex) => candidateIndex === index ? point : candidate);
+  }
+
+  function pointFromPolar(center, angle, radius) {
+    return [
+      center[0] + Math.cos(angle) * radius,
+      center[1] + Math.sin(angle) * radius
+    ];
+  }
+
+  function getPolygonCenter(vertices) {
+    if (vertices.length === 0) {
+      return [0, 0];
+    }
+    const sum = vertices.reduce((total, vertex) => {
+      return [total[0] + vertex[0], total[1] + vertex[1]];
+    }, [0, 0]);
+    return [sum[0] / vertices.length, sum[1] / vertices.length];
+  }
+
+  function polygonArea(vertices) {
+    let area = 0;
+    for (let i = 0; i < vertices.length; i += 1) {
+      const current = vertices[i];
+      const next = vertices[(i + 1) % vertices.length];
+      area += current[0] * next[1] - next[0] * current[1];
+    }
+    return area / 2;
+  }
+
+  function normalizeVector(vector) {
+    const length = Math.hypot(vector[0], vector[1]);
+    if (length < 1e-9) {
+      return [1, 0];
+    }
+    return [vector[0] / length, vector[1] / length];
+  }
+
+  function maxRadiusToDecisionView(center, direction) {
+    if (!currentDecisionView) {
+      return 1;
+    }
+
+    const candidates = [];
+    if (Math.abs(direction[0]) > 1e-9) {
+      candidates.push(((direction[0] > 0 ? currentDecisionView.xMax : currentDecisionView.xMin) - center[0]) / direction[0]);
+    }
+    if (Math.abs(direction[1]) > 1e-9) {
+      candidates.push(((direction[1] > 0 ? currentDecisionView.yMax : currentDecisionView.yMin) - center[1]) / direction[1]);
+    }
+
+    const positiveCandidates = candidates.filter((value) => value > 0);
+    return positiveCandidates.length === 0 ? 1 : Math.min(...positiveCandidates);
+  }
+
+  function unwrapAngleNear(angle, reference) {
+    let unwrapped = angle;
+    while (unwrapped - reference > Math.PI) {
+      unwrapped -= Math.PI * 2;
+    }
+    while (reference - unwrapped > Math.PI) {
+      unwrapped += Math.PI * 2;
+    }
+    return unwrapped;
+  }
+
+  function unwrapAngleBefore(angle, reference) {
+    let unwrapped = unwrapAngleNear(angle, reference);
+    while (unwrapped >= reference) {
+      unwrapped -= Math.PI * 2;
+    }
+    return unwrapped;
+  }
+
+  function unwrapAngleAfter(angle, reference) {
+    let unwrapped = unwrapAngleNear(angle, reference);
+    while (unwrapped <= reference) {
+      unwrapped += Math.PI * 2;
+    }
+    return unwrapped;
+  }
+
+  function pointInConvexPolygon(point, polygon) {
+    let sign = 0;
+    for (let i = 0; i < polygon.length; i += 1) {
+      const a = polygon[i];
+      const b = polygon[(i + 1) % polygon.length];
+      const cross = crossProduct(a, b, point);
+      if (Math.abs(cross) < 1e-10) {
+        continue;
+      }
+      const currentSign = Math.sign(cross);
+      if (sign === 0) {
+        sign = currentSign;
+      } else if (sign !== currentSign) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function crossProduct(a, b, c) {
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  }
+
+  function getPolygonEdges(polygon) {
+    return polygon.map((point, index) => [point, polygon[(index + 1) % polygon.length]]);
+  }
+
+  function clampPointToDecisionView(point) {
+    if (!currentDecisionView) {
+      return point.slice();
+    }
+    return [
+      clamp(point[0], currentDecisionView.xMin, currentDecisionView.xMax),
+      clamp(point[1], currentDecisionView.yMin, currentDecisionView.yMax)
+    ];
   }
 
   function projectToSegment(point, a, b) {
@@ -836,6 +1194,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function clamp01(value) {
     return Math.max(0, Math.min(1, value));
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
   function makeNormalPairs(count, seed) {
