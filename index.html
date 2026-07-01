@@ -6,19 +6,6 @@
   <meta name="description" content="A static academic project website prototype for CREDO, a framework for assessing decision reliability under uncertainty.">
   <title>CREDO | Conformalized Risk Estimation for Decision Optimization</title>
   <link rel="stylesheet" href="style.css">
-  <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [['\\(', '\\)']],
-        displayMath: [['\\[', '\\]']],
-        processEscapes: true
-      },
-      options: {
-        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
-      }
-    };
-  </script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -26,10 +13,10 @@
     <nav class="nav" aria-label="Primary navigation">
       <a class="brand" href="#top" aria-label="CREDO home">CREDO</a>
       <div class="nav-links">
-        <a href="#motivation">Motivation</a>
-        <a href="#framework">Framework</a>
-        <a href="#results">Results</a>
         <a href="#interactive-demo">Demo</a>
+        <a href="#context">Context</a>
+        <a href="Conformalized%20Decision%20Risk%20Assessment.pdf">Paper</a>
+        <a href="#code">Code</a>
         <a href="#citation">Citation</a>
       </div>
     </nav>
@@ -38,126 +25,24 @@
   <main id="top">
     <section class="hero">
       <div class="hero-content">
-        <p class="eyebrow">Academic project website</p>
         <h1>CREDO</h1>
         <p class="subtitle">Conformalized Risk Estimation for Decision Optimization</p>
-        <p class="tagline">A decision-risk assessment framework for evaluating whether prescribed human or algorithmic decisions remain near-optimal under uncertainty.</p>
+        <p class="tagline">A compact interactive demo for auditing whether prescribed decisions remain near-optimal under uncertainty.</p>
         <div class="button-row" aria-label="Project links">
           <a class="button primary" href="#interactive-demo">Try Demo</a>
           <a class="button" href="Conformalized%20Decision%20Risk%20Assessment.pdf">Paper</a>
           <a class="button" href="https://github.com/wbzhou2001/CREDO" target="_blank" rel="noopener noreferrer">Code</a>
+          <a class="button" href="#citation">Citation</a>
         </div>
         <p class="authors">Wenbin Zhou · Agni Orfanoudaki · Shixiang Zhu</p>
       </div>
       <aside class="hero-panel" aria-label="Core idea summary">
         <span class="panel-label">Decision risk</span>
-        <p>Audit the probability that a prescribed decision is not near-optimal after the uncertain outcome is realized.</p>
+        <p>Estimate when a candidate z falls outside the near-optimal set.</p>
         <div class="math-callout">
-          <span>\( P\{ z \notin \pi(Y) \} \)</span>
+          <span>P{ z &notin; &pi;(Y) }</span>
         </div>
       </aside>
-    </section>
-
-    <section id="motivation" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">Motivation</p>
-        <h2>From recommended decisions to decision-risk assessment</h2>
-      </div>
-      <div class="two-column">
-        <p>
-          Traditional predict-then-optimize pipelines often convert data into a single predicted outcome and then solve an optimization problem to produce or justify one decision. That workflow is useful, but it can leave an important question unanswered: how dependable is the prescribed decision when the uncertain outcome differs from the prediction?
-        </p>
-        <p>
-          CREDO focuses on decision-risk assessment for a prescribed decision. Instead of only asking which decision an optimizer returns, it evaluates whether a human or algorithmic decision remains near-optimal across plausible realizations of the uncertain outcome.
-        </p>
-      </div>
-      <figure class="paper-figure">
-        <img src="assets/figures/figure1.png" alt="Comparison between conventional predict-then-optimize and CREDO decision-risk assessment.">
-        <figcaption>
-          <span>Figure 1: From prediction to decision-risk assessment</span>
-          <p>Figure 1 contrasts conventional predict-then-optimize with CREDO's decision-risk assessment perspective: instead of only outputting a decision, CREDO evaluates the risk of a prescribed decision.</p>
-        </figcaption>
-      </figure>
-    </section>
-
-    <section id="question" class="section accent">
-      <div class="question-wrap">
-        <p class="eyebrow">Core Question</p>
-        <h2>Given a candidate decision <span class="inline-math">\( z \)</span>, what is the probability that <span class="inline-math">\( z \)</span> is not near-optimal when the uncertain outcome <span class="inline-math">\( Y \)</span> is realized?</h2>
-        <div class="formula" aria-label="Probability that z does not belong to pi of Y">
-          \[ P\{ z \notin \pi(Y) \} \]
-        </div>
-        <div class="term-list" aria-label="Key terms">
-          <p><strong>Near-optimal:</strong> membership in <span class="inline-math">\( \pi(Y) \)</span>, meaning optimal up to a user-specified tolerance for realized outcome <span class="inline-math">\( Y \)</span>.</p>
-          <p><strong>Decision risk:</strong> the probability <span class="inline-math">\( P\{ z \notin \pi(Y) \} \)</span> that a prescribed decision <span class="inline-math">\( z \)</span> is not near-optimal under the realized uncertainty.</p>
-          <p><strong>Distribution-free:</strong> the conformal guarantee does not require specifying the full data distribution, under the paper's assumptions.</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="framework" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">CREDO Framework</p>
-        <h2>A two-step route to decision-risk assessment</h2>
-      </div>
-      <div class="steps">
-        <article class="step">
-          <div class="step-index">1</div>
-          <div>
-            <h3>Map the decision to an inverse feasible region</h3>
-            <p>
-              For a candidate decision <span class="inline-math">\( z \)</span>, CREDO considers the set of uncertain outcomes under which <span class="inline-math">\( z \)</span> would be near-optimal. This region is written as <span class="inline-math">\( \pi^{-1}(z) \)</span>.
-            </p>
-          </div>
-        </article>
-        <article class="step">
-          <div class="step-index">2</div>
-          <div>
-            <h3>Assess probability mass with conformal prediction</h3>
-            <p>
-              Generative conformal prediction is used to assess whether sufficient probability mass lies inside the inverse feasible region. Under exchangeability and the paper's assumptions, conformal calibration provides finite-sample coverage guarantees for auditing the prescribed decision.
-            </p>
-          </div>
-        </article>
-      </div>
-      <figure class="paper-figure wide">
-        <img src="assets/figures/figure2.png" alt="CREDO workflow showing inverse feasible region construction and conformal risk estimation.">
-        <figcaption>
-          <span>Figure 2: CREDO workflow</span>
-          <p>Figure 2 illustrates the two-step CREDO procedure: mapping a candidate decision to its inverse feasible region, then assessing decision risk using generative conformal prediction.</p>
-        </figcaption>
-      </figure>
-    </section>
-
-    <section id="generative-cp" class="section compact">
-      <div class="section-heading">
-        <p class="eyebrow">Why Generative Conformal Prediction?</p>
-        <h2>Using multiple generated samples to avoid relying on a single point prediction</h2>
-      </div>
-      <p class="lead">
-        A single point prediction can be too narrow a basis for assessing the risk of a decision <span class="inline-math">\( z \)</span>. By working with multiple generated samples, CREDO can assess whether sufficient probability mass is associated with the inverse feasible region <span class="inline-math">\( \pi^{-1}(z) \)</span> and avoid relying solely on one predicted outcome. The goal is a conservative risk assessment, while conformal calibration provides finite-sample coverage guarantees under exchangeability.
-      </p>
-    </section>
-
-    <section id="results" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">Results</p>
-        <h2>What the framework is designed to support</h2>
-      </div>
-      <div class="cards">
-        <article class="card">
-          <h3>Conservative risk estimation</h3>
-          <p>CREDO is designed to estimate decision risk for prescribed decisions under uncertainty, with conformal calibration used to support conservative coverage statements.</p>
-        </article>
-        <article class="card">
-          <h3>Risk-aware comparison of candidate decisions</h3>
-          <p>The estimated risk can help compare candidate human or algorithmic decisions when reliability is part of the audit or evaluation question.</p>
-        </article>
-        <article class="card">
-          <h3>Ablation insights</h3>
-          <p>The paper evaluates modular framework components across several optimization settings, including how design choices affect the resulting risk estimates.</p>
-        </article>
-      </div>
     </section>
 
     <section id="interactive-demo" class="section demo-section">
@@ -165,26 +50,22 @@
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
         <h2>Audit a candidate decision in an editable 2D linear program</h2>
         <p class="lead">
-          Explore the LP \( \min_{z \in \mathcal{Z}} \langle y, z \rangle \), where \( \mathcal{Z} \) is an editable 2D feasible region initialized as the triangle with vertices \( (0,0) \), \( (1,0) \), and \( (0,1) \). Drag the selected decision \( z \) or the feasible-region boundary vertices to see how \( \pi^{-1}_{\epsilon}(z) \), the outcomes for which the selected decision remains near-optimal, changes.
+          Compare saved scenarios for the same simplified LP demo.
         </p>
       </div>
 
       <div class="demo-shell" data-credo-demo>
+        <div class="scenario-bar" aria-label="Demo scenario tabs">
+          <div class="scenario-tabs" id="scenario-tabs" role="tablist" aria-label="Demo scenarios"></div>
+          <button class="scenario-add-button" id="scenario-add" type="button">+ Add scenario</button>
+        </div>
+        <span class="sr-only" id="demo-z-value">Current z: (0.00, 0.00)</span>
+
         <form class="demo-controls" aria-label="Interactive CREDO demo controls">
           <div class="demo-control-grid">
-            <label class="control-group" for="demo-z">
-              <span>Candidate preset \( z \)</span>
-              <select id="demo-z" name="z">
-                <option value="first">First boundary vertex</option>
-                <option value="center">Center point</option>
-                <option value="custom">Dragged custom point</option>
-              </select>
-              <output class="control-helper" id="demo-z-value" for="demo-z">Current z: (0.00, 0.00)</output>
-            </label>
-
             <label class="control-group" for="demo-vertex-count">
-              <span>Number of boundary vertices</span>
-              <input id="demo-vertex-count" name="vertex-count" type="range" min="1" max="10" step="1" value="3">
+              <span title="Number of boundary vertices">Vertices</span>
+              <input id="demo-vertex-count" name="vertex-count" type="range" min="1" max="10" step="1" value="3" aria-label="Number of boundary vertices">
               <output id="demo-vertex-count-value" for="demo-vertex-count">3</output>
             </label>
 
@@ -199,19 +80,19 @@
             </label>
 
             <label class="control-group" for="demo-sigma">
-              <span>Uncertainty level \( \sigma \)</span>
+              <span>Uncertainty level &sigma;</span>
               <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35">
               <output id="demo-sigma-value" for="demo-sigma">0.35</output>
             </label>
 
             <label class="control-group" for="demo-k">
-              <span>Generated samples \( K \)</span>
+              <span>Generated samples K</span>
               <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60">
               <output id="demo-k-value" for="demo-k">60</output>
             </label>
 
             <label class="control-group" for="demo-epsilon">
-              <span>Near-optimal tolerance \( \epsilon \)</span>
+              <span>Near-optimal tolerance &epsilon;</span>
               <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08">
               <output id="demo-epsilon-value" for="demo-epsilon">0.08</output>
             </label>
@@ -224,13 +105,11 @@
                 <option value="e-value">e-value radius Re</option>
               </select>
             </label>
-          </div>
 
-          <div class="demo-action-row">
-            <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
-            <p class="sample-note">
-              Use sample patterns or resampling to see how the same decision behaves under different simulated outcome distributions.
-            </p>
+            <div class="control-group control-action">
+              <span>Samples</span>
+              <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
+            </div>
           </div>
         </form>
 
@@ -238,12 +117,12 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Decision space</h3>
-              <p>Drag \( z \) or the editable boundary vertices that define \( \mathcal{Z} \).</p>
+              <p>Drag z or the boundary vertices.</p>
             </div>
-            <canvas id="decision-canvas" width="480" height="360" aria-label="Editable feasible region and selected candidate decision"></canvas>
+            <canvas id="decision-canvas" width="420" height="420" aria-label="Editable feasible region and selected candidate decision"></canvas>
             <div class="demo-legend" aria-label="Decision space legend">
-              <span><i class="legend-swatch feasible"></i>Feasible region \( \mathcal{Z} \)</span>
-              <span><i class="legend-dot selected"></i>Selected \( z \)</span>
+              <span><i class="legend-swatch feasible"></i>Feasible region Z</span>
+              <span><i class="legend-dot selected"></i>Selected z</span>
               <span><i class="legend-dot vertex"></i>Editable boundary vertex</span>
             </div>
           </article>
@@ -251,12 +130,12 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Outcome space</h3>
-              <p>Samples are tested against \( \pi^{-1}_{\epsilon}(z) \).</p>
+              <p>Samples vs. &pi;<sup>-1</sup><sub>&epsilon;</sub>(z).</p>
             </div>
-            <canvas id="outcome-canvas" width="560" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
+            <canvas id="outcome-canvas" width="420" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
             <div class="demo-legend" aria-label="Outcome space legend">
               <span><i class="legend-swatch distribution"></i>Ground-truth simulated outcome density</span>
-              <span><i class="legend-swatch inverse"></i>Inverse feasible region \( \pi^{-1}_{\epsilon}(z) \)</span>
+              <span><i class="legend-swatch inverse"></i>Inverse feasible region &pi;<sup>-1</sup><sub>&epsilon;</sub>(z)</span>
               <span><i class="legend-dot inside"></i>Near-optimal</span>
               <span><i class="legend-dot outside"></i>Not near-optimal</span>
             </div>
@@ -268,11 +147,11 @@
           <article class="demo-panel risk-panel">
             <div class="demo-panel-heading">
               <h3>Risk estimate</h3>
-              <p>Estimated probability that \( z \) is not near-optimal.</p>
+              <p>Estimated non-near-optimal probability.</p>
             </div>
             <div class="risk-number" aria-live="polite">
               <span id="risk-value">0.00</span>
-              <small>\( \widehat{\alpha}(z) \)</small>
+              <small>alpha-hat(z)</small>
             </div>
             <div class="risk-true" aria-live="polite">
               <strong>Approx. true risk under simulated distribution</strong>
@@ -280,34 +159,45 @@
             </div>
             <div class="risk-bars" id="risk-bars" aria-label="Risk estimates for all candidate decisions"></div>
             <p class="risk-explainer">
-              Monte Carlo radius R∞ is the most intuitive hard failure-rate estimate. p-value radius Rp uses calibration quantiles as a balanced conformal-style mode. e-value radius Re is more conservative and is designed for stronger post-hoc validity intuition. The approximate true risk remains a hard 0/1 failure rate under the simulated distribution. This is a simplified 2D educational implementation and does not claim to reproduce all theoretical guarantees or experiments.
+              Educational 2D approximation; not a reproduction of the paper's full guarantees.
             </p>
           </article>
         </div>
       </div>
 
       <p class="demo-note">
-        This is a simplified educational implementation of the CREDO workflow for a 2D linear program. It illustrates inverse feasible regions, generated samples, conformal-style balls, and estimated decision risk. It does not claim to reproduce the full theoretical guarantees or experiments from the paper.
+        Simplified 2D LP demo. Conformal-style balls are visual intuition, not full theoretical reproduction.
       </p>
     </section>
 
-    <section id="assistant" class="section placeholder-section">
-      <div class="placeholder-content">
-        <p class="eyebrow">Planned extension</p>
-        <h2>CREDO paper assistant</h2>
-        <p>
-          This planned section would provide a chatbot-style assistant that helps readers navigate the paper, clarify notation, and connect the CREDO framework to decision-risk assessment concepts.
-        </p>
+    <section id="context" class="section compact context-section">
+      <div class="section-heading">
+        <p class="eyebrow">Context</p>
+        <h2>What the demo is showing</h2>
+      </div>
+      <div class="cards compact-cards">
+        <article class="card">
+          <h3>Motivation</h3>
+          <p>CREDO asks whether a prescribed decision remains near-optimal after the uncertain outcome is realized, rather than only asking which decision a prediction pipeline returns.</p>
+        </article>
+        <article class="card">
+          <h3>Framework</h3>
+          <p>For a candidate z, the demo shades outcomes where z is near-optimal for an editable feasible region Z, then estimates the mass outside that region.</p>
+        </article>
+        <article class="card">
+          <h3>Results</h3>
+          <p>The paper studies conformal decision-risk assessment more broadly. This page keeps the interactive piece limited to the simplified 2D linear case.</p>
+        </article>
       </div>
     </section>
 
-    <section id="code" class="section compact">
+    <section id="code" class="section compact code-section">
       <div class="section-heading">
         <p class="eyebrow">Code</p>
         <h2>Code repository</h2>
       </div>
-      <p class="lead">Explore the official CREDO code repository for experiment notebooks, implementation files, and visualization code accompanying the paper.</p>
-      <a class="button" href="https://github.com/wbzhou2001/CREDO" target="_blank" rel="noopener noreferrer">View official code repository</a>
+      <p class="lead">The official CREDO research code is maintained in the authors' repository and includes experiment notebooks, implementation files, and visualization code accompanying the paper.</p>
+      <a class="button code-button" href="https://github.com/wbzhou2001/CREDO" target="_blank" rel="noopener noreferrer">View official code repository</a>
     </section>
 
     <section id="citation" class="section citation">
