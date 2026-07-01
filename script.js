@@ -11,10 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
     [1, 0],
     [0, 1]
   ];
-  let boundaryVertices = makeBoundaryVertices(3);
+  const sampleCountMax = 150;
 
   const controls = {
-    z: document.getElementById("demo-z"),
     zValue: document.getElementById("demo-z-value"),
     vertexCount: document.getElementById("demo-vertex-count"),
     vertexCountValue: document.getElementById("demo-vertex-count-value"),
@@ -29,6 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
     mode: document.getElementById("demo-mode")
   };
 
+  const scenarioTabs = document.getElementById("scenario-tabs");
+  const scenarioAdd = document.getElementById("scenario-add");
   const decisionCanvas = document.getElementById("decision-canvas");
   const outcomeCanvas = document.getElementById("outcome-canvas");
   const outcomeRadiusNote = document.getElementById("outcome-radius-note");
@@ -38,6 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (
     Object.values(controls).some((control) => !control)
+    || !scenarioTabs
+    || !scenarioAdd
     || !decisionCanvas
     || !outcomeCanvas
     || !outcomeRadiusNote
@@ -48,7 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const sampleCountMax = 150;
   const demoColors = {
     feasibleFill: "rgba(103, 112, 108, 0.20)",
     feasibleStroke: "#1f2421",
@@ -64,12 +66,19 @@ document.addEventListener("DOMContentLoaded", () => {
     nearOptimal: "#285c4d",
     notNearOptimal: "#b84d3f"
   };
-  let generatedSampleSeed = 24591;
-  let generatedSamplePairs = makeNormalPairs(sampleCountMax, generatedSampleSeed);
   const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
-  let selectedZ = boundaryVertices[0].slice();
+  let scenarioCounter = 0;
+  const scenarios = [
+    createScenario("Scenario 1", 24591),
+    createScenario("Scenario 2", 62483)
+  ];
+  let activeScenarioId = scenarios[0].id;
+  let boundaryVertices = [];
+  let selectedZ = [0, 0];
+  let generatedSampleSeed = 24591;
+  let generatedSamplePairs = [];
   let scheduled = false;
   let dragTarget = null;
   let hoverSampleIndex = null;
@@ -77,16 +86,27 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentDecisionView = null;
   let currentOutcomeView = null;
 
-  controls.z.addEventListener("change", () => {
-    if (controls.z.value === "first") {
-      selectedZ = boundaryVertices[0].slice();
-    } else if (controls.z.value === "center") {
-      selectedZ = getPolygonCenter(boundaryVertices);
-    } else {
+  scenarioTabs.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-scenario-close]");
+    if (closeButton) {
+      closeScenario(closeButton.dataset.scenarioClose);
       return;
     }
-    syncPresetSelect();
-    scheduleRender();
+
+    const tab = event.target.closest("[data-scenario-tab]");
+    if (tab) {
+      switchScenario(tab.dataset.scenarioTab);
+    }
+  });
+
+  scenarioAdd.addEventListener("click", () => {
+    saveActiveScenarioState();
+    const scenario = createScenario(`Scenario ${scenarioCounter + 1}`, makeResampleSeed());
+    scenarios.push(scenario);
+    activeScenarioId = scenario.id;
+    loadScenarioState(scenario);
+    renderScenarioTabs();
+    render();
   });
 
   controls.vertexCount.addEventListener("input", handleVertexCountChange);
@@ -165,6 +185,8 @@ document.addEventListener("DOMContentLoaded", () => {
     scheduleRender();
   });
 
+  loadScenarioState(getActiveScenario());
+  renderScenarioTabs();
   render();
 
   function scheduleRender() {
@@ -178,8 +200,125 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function createScenario(label, seed) {
+    scenarioCounter += 1;
+    const vertices = makeBoundaryVertices(3);
+    return {
+      id: `scenario-${scenarioCounter}`,
+      label,
+      selectedZ: vertices[0].slice(),
+      boundaryVertices: vertices.map((vertex) => vertex.slice()),
+      samplePattern: "baseline",
+      sigma: 0.35,
+      k: 60,
+      epsilon: 0.08,
+      mode: "monte-carlo",
+      generatedSampleSeed: seed,
+      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
+    };
+  }
+
+  function getActiveScenario() {
+    return scenarios.find((scenario) => scenario.id === activeScenarioId) || scenarios[0];
+  }
+
+  function saveActiveScenarioState(settings = null) {
+    const scenario = getActiveScenario();
+    if (!scenario) {
+      return;
+    }
+
+    scenario.selectedZ = selectedZ.slice();
+    scenario.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
+    scenario.samplePattern = settings ? settings.samplePattern : controls.samplePattern.value;
+    scenario.sigma = settings ? settings.sigma : Number.parseFloat(controls.sigma.value);
+    scenario.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
+    scenario.epsilon = settings ? settings.epsilon : Number.parseFloat(controls.epsilon.value);
+    scenario.mode = settings ? settings.mode : controls.mode.value;
+    scenario.generatedSampleSeed = generatedSampleSeed;
+    scenario.generatedSamplePairs = generatedSamplePairs.map((pair) => pair.slice());
+  }
+
+  function loadScenarioState(scenario) {
+    boundaryVertices = scenario.boundaryVertices.map((vertex) => vertex.slice());
+    selectedZ = scenario.selectedZ.slice();
+    generatedSampleSeed = scenario.generatedSampleSeed;
+    generatedSamplePairs = scenario.generatedSamplePairs.map((pair) => pair.slice());
+    controls.vertexCount.value = String(boundaryVertices.length);
+    controls.samplePattern.value = scenario.samplePattern;
+    controls.sigma.value = String(scenario.sigma);
+    controls.k.value = String(scenario.k);
+    controls.epsilon.value = String(scenario.epsilon);
+    controls.mode.value = scenario.mode;
+    clearSampleSelection();
+  }
+
+  function renderScenarioTabs() {
+    scenarioTabs.replaceChildren();
+
+    scenarios.forEach((scenario) => {
+      const tab = document.createElement("button");
+      tab.className = `scenario-tab${scenario.id === activeScenarioId ? " is-active" : ""}`;
+      tab.type = "button";
+      tab.role = "tab";
+      tab.dataset.scenarioTab = scenario.id;
+      tab.setAttribute("aria-selected", scenario.id === activeScenarioId ? "true" : "false");
+      tab.textContent = scenario.label;
+
+      if (scenarios.length > 1) {
+        const close = document.createElement("span");
+        close.className = "scenario-close";
+        close.dataset.scenarioClose = scenario.id;
+        close.setAttribute("aria-label", `Close ${scenario.label}`);
+        close.textContent = "×";
+        tab.append(close);
+      }
+
+      scenarioTabs.append(tab);
+    });
+  }
+
+  function switchScenario(id) {
+    if (id === activeScenarioId) {
+      return;
+    }
+    const scenario = scenarios.find((candidate) => candidate.id === id);
+    if (!scenario) {
+      return;
+    }
+    saveActiveScenarioState();
+    activeScenarioId = id;
+    loadScenarioState(scenario);
+    renderScenarioTabs();
+    render();
+  }
+
+  function closeScenario(id) {
+    if (scenarios.length <= 1) {
+      return;
+    }
+
+    const index = scenarios.findIndex((scenario) => scenario.id === id);
+    if (index === -1) {
+      return;
+    }
+
+    if (id === activeScenarioId) {
+      const nextScenario = scenarios[index + 1] || scenarios[index - 1];
+      activeScenarioId = nextScenario.id;
+    } else {
+      saveActiveScenarioState();
+    }
+
+    scenarios.splice(index, 1);
+    loadScenarioState(getActiveScenario());
+    renderScenarioTabs();
+    render();
+  }
+
   function render() {
     const settings = readSettings();
+    saveActiveScenarioState(settings);
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
@@ -221,7 +360,6 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
-    syncPresetSelect();
   }
 
   function updateOutcomeNote(settings, samples) {
@@ -394,7 +532,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const plot = { left: 58, top: 28, right: width - 28, bottom: height - 48 };
+    const plot = makeSquarePlot(width, height, { left: 52, right: 20, top: 24, bottom: 44 });
     const xMin = -0.15;
     const xMax = 1.15;
     const yMin = -0.15;
@@ -470,7 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const xMax = extent;
     const yMin = -extent;
     const yMax = extent;
-    const plot = { left: 56, top: 30, right: width - 24, bottom: height - 48 };
+    const plot = makeSquarePlot(width, height, { left: 52, right: 20, top: 24, bottom: 44 });
     const toCanvas = makeProjector(plot, xMin, xMax, yMin, yMax);
     currentOutcomeView = { samples, toCanvas, plot };
 
@@ -483,7 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const activeSample = samples[getActiveSampleIndex()];
     if (isConformalRadiusMode(settings.mode) && activeSample) {
-      drawSelectedConformalBall(ctx, settings, activeSample, toCanvas, plot, xMin, xMax, yMin, yMax);
+      drawSelectedConformalBall(ctx, settings, activeSample, toCanvas, plot, xMin, xMax);
     }
 
     samples.forEach((sample, index) => {
@@ -612,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax, yMin, yMax) {
+  function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax) {
     if (!isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices)) {
       return;
     }
@@ -627,14 +765,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const pixelRadiusX = (radius / (xMax - xMin)) * (plot.right - plot.left);
-    const pixelRadiusY = (radius / (yMax - yMin)) * (plot.bottom - plot.top);
+    const pixelRadius = (radius / (xMax - xMin)) * (plot.right - plot.left);
     ctx.save();
     ctx.strokeStyle = "rgba(178, 106, 44, 0.58)";
     ctx.fillStyle = "rgba(178, 106, 44, 0.09)";
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.ellipse(x, y, pixelRadiusX, pixelRadiusY, 0, 0, Math.PI * 2);
+    ctx.arc(x, y, pixelRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -645,36 +782,73 @@ document.addEventListener("DOMContentLoaded", () => {
     trueRiskValue.textContent = approximateTrueRisk.toFixed(2);
     riskBars.replaceChildren();
 
-    const rows = [
-      { label: `selected ${formatPoint(settings.z)}`, risk: selectedRisk, selected: true },
-      ...boundaryVertices.map((vertex, index) => ({
-        label: `boundary v${index + 1} ${formatPoint(vertex)}`,
-        risk: presetRisks[index],
+    riskBars.append(makeRiskRow({
+      label: `selected ${formatPoint(settings.z)}`,
+      risk: selectedRisk,
+      selected: true
+    }));
+
+    if (presetRisks.length === 0) {
+      return;
+    }
+
+    const boundarySummary = summarizeBoundaryRisks(presetRisks);
+    const summary = document.createElement("div");
+    summary.className = "risk-boundary-summary";
+    summary.textContent = `Boundary vertices (${presetRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
+    riskBars.append(summary);
+
+    if (presetRisks.length > 1) {
+      riskBars.append(makeRiskRow({
+        label: `best boundary v${boundarySummary.min.index + 1}`,
+        risk: boundarySummary.min.risk,
         selected: false
-      }))
-    ];
+      }));
+      riskBars.append(makeRiskRow({
+        label: `worst boundary v${boundarySummary.max.index + 1}`,
+        risk: boundarySummary.max.risk,
+        selected: false
+      }));
+    }
+  }
 
-    rows.forEach((item) => {
-      const row = document.createElement("div");
-      row.className = `risk-row${item.selected ? " is-selected" : ""}`;
+  function makeRiskRow(item) {
+    const row = document.createElement("div");
+    row.className = `risk-row${item.selected ? " is-selected" : ""}`;
 
-      const label = document.createElement("span");
-      label.className = "risk-label";
-      label.textContent = item.label;
+    const label = document.createElement("span");
+    label.className = "risk-label";
+    label.textContent = item.label;
 
-      const track = document.createElement("span");
-      track.className = "risk-track";
-      const fill = document.createElement("span");
-      fill.className = "risk-fill";
-      fill.style.width = `${Math.max(0, Math.min(1, item.risk)) * 100}%`;
-      track.append(fill);
+    const track = document.createElement("span");
+    track.className = "risk-track";
+    const fill = document.createElement("span");
+    fill.className = "risk-fill";
+    fill.style.width = `${Math.max(0, Math.min(1, item.risk)) * 100}%`;
+    track.append(fill);
 
-      const value = document.createElement("span");
-      value.className = "risk-row-value";
-      value.textContent = item.risk.toFixed(2);
+    const value = document.createElement("span");
+    value.className = "risk-row-value";
+    value.textContent = item.risk.toFixed(2);
 
-      row.append(label, track, value);
-      riskBars.append(row);
+    row.append(label, track, value);
+    return row;
+  }
+
+  function summarizeBoundaryRisks(risks) {
+    return risks.reduce((summary, risk, index) => {
+      const nextSummary = {
+        min: risk < summary.min.risk ? { risk, index } : summary.min,
+        max: risk > summary.max.risk ? { risk, index } : summary.max,
+        sum: summary.sum + risk
+      };
+      nextSummary.average = nextSummary.sum / risks.length;
+      return nextSummary;
+    }, {
+      min: { risk: Number.POSITIVE_INFINITY, index: 0 },
+      max: { risk: Number.NEGATIVE_INFINITY, index: 0 },
+      sum: 0,
+      average: 0
     });
   }
 
@@ -687,7 +861,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       selectedZ = projectToFeasibleRegion(point);
     }
-    syncPresetSelect();
     scheduleRender();
     event.preventDefault();
   }
@@ -768,23 +941,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return hoverSampleIndex === null ? pinnedSampleIndex : hoverSampleIndex;
   }
 
-  function syncPresetSelect() {
-    if (pointsAlmostEqual(selectedZ, boundaryVertices[0])) {
-      controls.z.value = "first";
-    } else if (pointsAlmostEqual(selectedZ, getPolygonCenter(boundaryVertices))) {
-      controls.z.value = "center";
-    } else {
-      controls.z.value = "custom";
-    }
-  }
-
   function setVertexCount(count) {
     const targetCount = Math.max(1, Math.min(10, count || 3));
     boundaryVertices = makeBoundaryVertices(targetCount);
     controls.vertexCount.value = String(targetCount);
     controls.vertexCountValue.value = String(targetCount);
     selectedZ = projectToFeasibleRegion(selectedZ);
-    syncPresetSelect();
   }
 
   function makeBoundaryVertices(count) {
@@ -1115,6 +1277,20 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
+  function makeSquarePlot(width, height, padding) {
+    const availableWidth = width - padding.left - padding.right;
+    const availableHeight = height - padding.top - padding.bottom;
+    const side = Math.max(1, Math.min(availableWidth, availableHeight));
+    const left = padding.left + Math.max(0, (availableWidth - side) / 2);
+    const top = padding.top + Math.max(0, (availableHeight - side) / 2);
+    return {
+      left,
+      top,
+      right: left + side,
+      bottom: top + side
+    };
+  }
+
   function makeProjector(plot, xMin, xMax, yMin, yMax) {
     return ([x, y]) => [
       plot.left + ((x - xMin) / (xMax - xMin)) * (plot.right - plot.left),
@@ -1182,10 +1358,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function formatPoint(point) {
     return `(${point[0].toFixed(2)}, ${point[1].toFixed(2)})`;
-  }
-
-  function pointsAlmostEqual(a, b) {
-    return Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.005;
   }
 
   function isConformalRadiusMode(mode) {
