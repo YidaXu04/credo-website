@@ -19,11 +19,10 @@ Open `index.html` directly in a browser. No build step, framework, or external d
 
 ## GitHub Pages Deployment
 
-This repository is ready to deploy as a static site from the repository root using GitHub Pages. Set the Pages source to the main branch and root directory. The site uses relative paths for the stylesheet, figures, and linked PDF.
+This repository is ready to deploy as a static site from the repository root using GitHub Pages. Set the Pages source to the main branch and root directory. The site uses relative paths for the stylesheet and linked PDF.
 
 ## Still Needs Author Confirmation
 
-- Figure permissions and final Figure 1 / Figure 2 artwork.
 - Code repository link.
 - Official paper link.
 - Final BibTeX.

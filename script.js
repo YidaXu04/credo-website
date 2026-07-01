@@ -89,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
   scenarioTabs.addEventListener("click", (event) => {
     const closeButton = event.target.closest("[data-scenario-close]");
     if (closeButton) {
+      event.stopPropagation();
       closeScenario(closeButton.dataset.scenarioClose);
       return;
     }
@@ -99,9 +100,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  scenarioTabs.addEventListener("keydown", (event) => {
+    if (event.key !== "Delete" && event.key !== "Backspace") {
+      return;
+    }
+    const tab = event.target.closest("[data-scenario-tab]");
+    if (!tab) {
+      return;
+    }
+    event.preventDefault();
+    closeScenario(tab.dataset.scenarioTab);
+  });
+
   scenarioAdd.addEventListener("click", () => {
     saveActiveScenarioState();
-    const scenario = createScenario(`Scenario ${scenarioCounter + 1}`, makeResampleSeed());
+    const scenario = cloneScenario(getActiveScenario(), `Scenario ${scenarioCounter + 1}`);
     scenarios.push(scenario);
     activeScenarioId = scenario.id;
     loadScenarioState(scenario);
@@ -218,6 +231,24 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  function cloneScenario(source, label) {
+    scenarioCounter += 1;
+    const seed = makeResampleSeed();
+    return {
+      id: `scenario-${scenarioCounter}`,
+      label,
+      selectedZ: source.selectedZ.slice(),
+      boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
+      samplePattern: source.samplePattern,
+      sigma: source.sigma,
+      k: source.k,
+      epsilon: source.epsilon,
+      mode: source.mode,
+      generatedSampleSeed: seed,
+      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
+    };
+  }
+
   function getActiveScenario() {
     return scenarios.find((scenario) => scenario.id === activeScenarioId) || scenarios[0];
   }
@@ -257,6 +288,9 @@ document.addEventListener("DOMContentLoaded", () => {
     scenarioTabs.replaceChildren();
 
     scenarios.forEach((scenario) => {
+      const group = document.createElement("div");
+      group.className = `scenario-tab-group${scenario.id === activeScenarioId ? " is-active" : ""}${scenarios.length > 1 ? " has-close" : ""}`;
+
       const tab = document.createElement("button");
       tab.className = `scenario-tab${scenario.id === activeScenarioId ? " is-active" : ""}`;
       tab.type = "button";
@@ -264,17 +298,20 @@ document.addEventListener("DOMContentLoaded", () => {
       tab.dataset.scenarioTab = scenario.id;
       tab.setAttribute("aria-selected", scenario.id === activeScenarioId ? "true" : "false");
       tab.textContent = scenario.label;
+      group.append(tab);
 
       if (scenarios.length > 1) {
-        const close = document.createElement("span");
+        const close = document.createElement("button");
         close.className = "scenario-close";
+        close.type = "button";
         close.dataset.scenarioClose = scenario.id;
         close.setAttribute("aria-label", `Close ${scenario.label}`);
+        close.title = `Close ${scenario.label}`;
         close.textContent = "×";
-        tab.append(close);
+        group.append(close);
       }
 
-      scenarioTabs.append(tab);
+      scenarioTabs.append(group);
     });
   }
 
@@ -322,7 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
-    const presetRisks = boundaryVertices.map((vertex) => {
+    const boundaryRisks = boundaryVertices.map((vertex) => {
       return estimateRisk(vertex, samples, residuals, settings);
     });
     const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
@@ -338,7 +375,7 @@ document.addEventListener("DOMContentLoaded", () => {
     drawDecisionSpace(decisionCanvas, settings.z);
     drawOutcomeSpace(outcomeCanvas, settings, samples);
     updateOutcomeNote(settings, samples);
-    updateRiskPanel(settings, selectedRisk, approximateTrueRisk, presetRisks);
+    updateRiskPanel(settings, selectedRisk, approximateTrueRisk, boundaryRisks);
   }
 
   function readSettings() {
@@ -777,7 +814,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  function updateRiskPanel(settings, selectedRisk, approximateTrueRisk, presetRisks) {
+  function updateRiskPanel(settings, selectedRisk, approximateTrueRisk, boundaryRisks) {
     riskValue.textContent = selectedRisk.toFixed(2);
     trueRiskValue.textContent = approximateTrueRisk.toFixed(2);
     riskBars.replaceChildren();
@@ -788,17 +825,17 @@ document.addEventListener("DOMContentLoaded", () => {
       selected: true
     }));
 
-    if (presetRisks.length === 0) {
+    if (boundaryRisks.length === 0) {
       return;
     }
 
-    const boundarySummary = summarizeBoundaryRisks(presetRisks);
+    const boundarySummary = summarizeBoundaryRisks(boundaryRisks);
     const summary = document.createElement("div");
     summary.className = "risk-boundary-summary";
-    summary.textContent = `Boundary vertices (${presetRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
+    summary.textContent = `Boundary vertices (${boundaryRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
     riskBars.append(summary);
 
-    if (presetRisks.length > 1) {
+    if (boundaryRisks.length > 1) {
       riskBars.append(makeRiskRow({
         label: `best boundary v${boundarySummary.min.index + 1}`,
         risk: boundarySummary.min.risk,
