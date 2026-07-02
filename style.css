@@ -110,13 +110,14 @@ main[id] {
 .hero {
   padding: 24px 0 18px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.36fr);
+  grid-template-columns: minmax(0, 1fr) minmax(210px, clamp(210px, 22vw, 260px));
   gap: 22px;
   align-items: center;
 }
 
 .hero-content {
-  max-width: 880px;
+  width: 100%;
+  max-width: none;
 }
 
 .eyebrow,
@@ -169,7 +170,7 @@ h3 {
 }
 
 .tagline {
-  max-width: 680px;
+  max-width: min(100%, 92ch);
   margin-bottom: 12px;
   color: var(--muted);
   font-family: Arial, Helvetica, sans-serif;
@@ -259,18 +260,19 @@ h3 {
 }
 
 .section.compact {
-  max-width: none;
+  width: min(var(--container-max), calc(100% - (var(--container-pad) * 2)));
 }
 
 .section-heading {
-  max-width: 860px;
+  width: 100%;
+  max-width: 1000px;
 }
 
 .lead {
   color: var(--muted);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 0.9rem;
-  max-width: 860px;
+  max-width: min(100%, 1000px);
   line-height: 1.35;
   margin-bottom: 0;
 }
@@ -298,6 +300,10 @@ h3 {
 .demo-section {
   padding-top: 18px;
   padding-bottom: 32px;
+}
+
+.demo-section .section-heading {
+  max-width: none;
 }
 
 .demo-shell {
@@ -814,7 +820,7 @@ h3 {
 .citation .section-heading,
 .code-section .lead,
 .citation pre {
-  max-width: 980px;
+  max-width: min(100%, 1040px);
 }
 
 .code-section .lead {
