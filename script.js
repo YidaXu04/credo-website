@@ -28,19 +28,20 @@ document.addEventListener("DOMContentLoaded", () => {
     mode: document.getElementById("demo-mode")
   };
 
-  const scenarioTabs = document.getElementById("scenario-tabs");
-  const scenarioAdd = document.getElementById("scenario-add");
+  const demoTabs = document.getElementById("demo-tabs");
+  const tabAdd = document.getElementById("demo-tab-add");
   const decisionCanvas = document.getElementById("decision-canvas");
   const outcomeCanvas = document.getElementById("outcome-canvas");
   const outcomeRadiusNote = document.getElementById("outcome-radius-note");
   const riskValue = document.getElementById("risk-value");
   const trueRiskValue = document.getElementById("true-risk-value");
   const riskBars = document.getElementById("risk-bars");
+  const tooltipTriggers = Array.from(root.querySelectorAll(".tooltip-trigger"));
 
   if (
     Object.values(controls).some((control) => !control)
-    || !scenarioTabs
-    || !scenarioAdd
+    || !demoTabs
+    || !tabAdd
     || !decisionCanvas
     || !outcomeCanvas
     || !outcomeRadiusNote
@@ -69,12 +70,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
-  let scenarioCounter = 0;
-  const scenarios = [
-    createScenario("Scenario 1", 24591),
-    createScenario("Scenario 2", 62483)
+  let tabCounter = 0;
+  const tabs = [
+    createTab("Tab 1", 24591),
+    createTab("Tab 2", 62483)
   ];
-  let activeScenarioId = scenarios[0].id;
+  let activeTabId = tabs[0].id;
   let boundaryVertices = [];
   let selectedZ = [0, 0];
   let generatedSampleSeed = 24591;
@@ -85,40 +86,77 @@ document.addEventListener("DOMContentLoaded", () => {
   let pinnedSampleIndex = null;
   let currentDecisionView = null;
   let currentOutcomeView = null;
+  let openTooltipTrigger = null;
 
-  scenarioTabs.addEventListener("click", (event) => {
-    const closeButton = event.target.closest("[data-scenario-close]");
-    if (closeButton) {
+  tooltipTriggers.forEach((trigger) => {
+    const tooltip = trigger.closest(".control-tooltip");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.addEventListener("click", (event) => {
       event.stopPropagation();
-      closeScenario(closeButton.dataset.scenarioClose);
-      return;
-    }
+      toggleTooltip(trigger);
+    });
+    trigger.addEventListener("blur", () => {
+      tooltip.classList.remove("is-suppressed");
+    });
+    tooltip.addEventListener("mouseleave", () => {
+      tooltip.classList.remove("is-suppressed");
+    });
+  });
 
-    const tab = event.target.closest("[data-scenario-tab]");
-    if (tab) {
-      switchScenario(tab.dataset.scenarioTab);
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".control-tooltip")) {
+      closeTooltip();
     }
   });
 
-  scenarioTabs.addEventListener("keydown", (event) => {
+  document.addEventListener("focusin", (event) => {
+    if (openTooltipTrigger && !event.target.closest(".control-tooltip")) {
+      closeTooltip();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && openTooltipTrigger) {
+      event.preventDefault();
+      const trigger = openTooltipTrigger;
+      closeTooltip({ suppressFocused: true });
+      trigger.focus();
+    }
+  });
+
+  demoTabs.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-tab-close]");
+    if (closeButton) {
+      event.stopPropagation();
+      closeTab(closeButton.dataset.tabClose);
+      return;
+    }
+
+    const tab = event.target.closest("[data-demo-tab]");
+    if (tab) {
+      switchTab(tab.dataset.demoTab);
+    }
+  });
+
+  demoTabs.addEventListener("keydown", (event) => {
     if (event.key !== "Delete" && event.key !== "Backspace") {
       return;
     }
-    const tab = event.target.closest("[data-scenario-tab]");
+    const tab = event.target.closest("[data-demo-tab]");
     if (!tab) {
       return;
     }
     event.preventDefault();
-    closeScenario(tab.dataset.scenarioTab);
+    closeTab(tab.dataset.demoTab);
   });
 
-  scenarioAdd.addEventListener("click", () => {
-    saveActiveScenarioState();
-    const scenario = cloneScenario(getActiveScenario(), `Scenario ${scenarioCounter + 1}`);
-    scenarios.push(scenario);
-    activeScenarioId = scenario.id;
-    loadScenarioState(scenario);
-    renderScenarioTabs();
+  tabAdd.addEventListener("click", () => {
+    saveActiveTabState();
+    const tab = cloneTab(getActiveTab(), `Tab ${tabCounter + 1}`);
+    tabs.push(tab);
+    activeTabId = tab.id;
+    loadTabState(tab);
+    renderTabs();
     render();
   });
 
@@ -198,8 +236,8 @@ document.addEventListener("DOMContentLoaded", () => {
     scheduleRender();
   });
 
-  loadScenarioState(getActiveScenario());
-  renderScenarioTabs();
+  loadTabState(getActiveTab());
+  renderTabs();
   render();
 
   function scheduleRender() {
@@ -213,11 +251,41 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function createScenario(label, seed) {
-    scenarioCounter += 1;
+  function toggleTooltip(trigger) {
+    if (openTooltipTrigger === trigger) {
+      closeTooltip({ suppressFocused: true });
+      return;
+    }
+
+    closeTooltip();
+    openTooltipTrigger = trigger;
+    trigger.setAttribute("aria-expanded", "true");
+    const tooltip = trigger.closest(".control-tooltip");
+    tooltip.classList.remove("is-suppressed");
+    tooltip.classList.add("is-open");
+  }
+
+  function closeTooltip(options = {}) {
+    if (!openTooltipTrigger) {
+      return;
+    }
+
+    openTooltipTrigger.setAttribute("aria-expanded", "false");
+    const tooltip = openTooltipTrigger.closest(".control-tooltip");
+    if (tooltip) {
+      tooltip.classList.remove("is-open");
+      if (options.suppressFocused) {
+        tooltip.classList.add("is-suppressed");
+      }
+    }
+    openTooltipTrigger = null;
+  }
+
+  function createTab(label, seed) {
+    tabCounter += 1;
     const vertices = makeBoundaryVertices(3);
     return {
-      id: `scenario-${scenarioCounter}`,
+      id: `tab-${tabCounter}`,
       label,
       selectedZ: vertices[0].slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
@@ -231,11 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function cloneScenario(source, label) {
-    scenarioCounter += 1;
+  function cloneTab(source, label) {
+    tabCounter += 1;
     const seed = makeResampleSeed();
     return {
-      id: `scenario-${scenarioCounter}`,
+      id: `tab-${tabCounter}`,
       label,
       selectedZ: source.selectedZ.slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
@@ -249,113 +317,113 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function getActiveScenario() {
-    return scenarios.find((scenario) => scenario.id === activeScenarioId) || scenarios[0];
+  function getActiveTab() {
+    return tabs.find((tab) => tab.id === activeTabId) || tabs[0];
   }
 
-  function saveActiveScenarioState(settings = null) {
-    const scenario = getActiveScenario();
-    if (!scenario) {
+  function saveActiveTabState(settings = null) {
+    const tab = getActiveTab();
+    if (!tab) {
       return;
     }
 
-    scenario.selectedZ = selectedZ.slice();
-    scenario.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
-    scenario.samplePattern = settings ? settings.samplePattern : controls.samplePattern.value;
-    scenario.sigma = settings ? settings.sigma : Number.parseFloat(controls.sigma.value);
-    scenario.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
-    scenario.epsilon = settings ? settings.epsilon : Number.parseFloat(controls.epsilon.value);
-    scenario.mode = settings ? settings.mode : controls.mode.value;
-    scenario.generatedSampleSeed = generatedSampleSeed;
-    scenario.generatedSamplePairs = generatedSamplePairs.map((pair) => pair.slice());
+    tab.selectedZ = selectedZ.slice();
+    tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
+    tab.samplePattern = settings ? settings.samplePattern : controls.samplePattern.value;
+    tab.sigma = settings ? settings.sigma : Number.parseFloat(controls.sigma.value);
+    tab.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
+    tab.epsilon = settings ? settings.epsilon : Number.parseFloat(controls.epsilon.value);
+    tab.mode = settings ? settings.mode : controls.mode.value;
+    tab.generatedSampleSeed = generatedSampleSeed;
+    tab.generatedSamplePairs = generatedSamplePairs.map((pair) => pair.slice());
   }
 
-  function loadScenarioState(scenario) {
-    boundaryVertices = scenario.boundaryVertices.map((vertex) => vertex.slice());
-    selectedZ = scenario.selectedZ.slice();
-    generatedSampleSeed = scenario.generatedSampleSeed;
-    generatedSamplePairs = scenario.generatedSamplePairs.map((pair) => pair.slice());
+  function loadTabState(tab) {
+    boundaryVertices = tab.boundaryVertices.map((vertex) => vertex.slice());
+    selectedZ = tab.selectedZ.slice();
+    generatedSampleSeed = tab.generatedSampleSeed;
+    generatedSamplePairs = tab.generatedSamplePairs.map((pair) => pair.slice());
     controls.vertexCount.value = String(boundaryVertices.length);
-    controls.samplePattern.value = scenario.samplePattern;
-    controls.sigma.value = String(scenario.sigma);
-    controls.k.value = String(scenario.k);
-    controls.epsilon.value = String(scenario.epsilon);
-    controls.mode.value = scenario.mode;
+    controls.samplePattern.value = tab.samplePattern;
+    controls.sigma.value = String(tab.sigma);
+    controls.k.value = String(tab.k);
+    controls.epsilon.value = String(tab.epsilon);
+    controls.mode.value = tab.mode;
     clearSampleSelection();
   }
 
-  function renderScenarioTabs() {
-    scenarioTabs.replaceChildren();
+  function renderTabs() {
+    demoTabs.replaceChildren();
 
-    scenarios.forEach((scenario) => {
+    tabs.forEach((demoTab) => {
       const group = document.createElement("div");
-      group.className = `scenario-tab-group${scenario.id === activeScenarioId ? " is-active" : ""}${scenarios.length > 1 ? " has-close" : ""}`;
+      group.className = `tab-group${demoTab.id === activeTabId ? " is-active" : ""}${tabs.length > 1 ? " has-close" : ""}`;
 
       const tab = document.createElement("button");
-      tab.className = `scenario-tab${scenario.id === activeScenarioId ? " is-active" : ""}`;
+      tab.className = `demo-tab${demoTab.id === activeTabId ? " is-active" : ""}`;
       tab.type = "button";
       tab.role = "tab";
-      tab.dataset.scenarioTab = scenario.id;
-      tab.setAttribute("aria-selected", scenario.id === activeScenarioId ? "true" : "false");
-      tab.textContent = scenario.label;
+      tab.dataset.demoTab = demoTab.id;
+      tab.setAttribute("aria-selected", demoTab.id === activeTabId ? "true" : "false");
+      tab.textContent = demoTab.label;
       group.append(tab);
 
-      if (scenarios.length > 1) {
+      if (tabs.length > 1) {
         const close = document.createElement("button");
-        close.className = "scenario-close";
+        close.className = "tab-close";
         close.type = "button";
-        close.dataset.scenarioClose = scenario.id;
-        close.setAttribute("aria-label", `Close ${scenario.label}`);
-        close.title = `Close ${scenario.label}`;
+        close.dataset.tabClose = demoTab.id;
+        close.setAttribute("aria-label", `Close ${demoTab.label}`);
+        close.title = `Close ${demoTab.label}`;
         close.textContent = "×";
         group.append(close);
       }
 
-      scenarioTabs.append(group);
+      demoTabs.append(group);
     });
   }
 
-  function switchScenario(id) {
-    if (id === activeScenarioId) {
+  function switchTab(id) {
+    if (id === activeTabId) {
       return;
     }
-    const scenario = scenarios.find((candidate) => candidate.id === id);
-    if (!scenario) {
+    const tab = tabs.find((candidate) => candidate.id === id);
+    if (!tab) {
       return;
     }
-    saveActiveScenarioState();
-    activeScenarioId = id;
-    loadScenarioState(scenario);
-    renderScenarioTabs();
+    saveActiveTabState();
+    activeTabId = id;
+    loadTabState(tab);
+    renderTabs();
     render();
   }
 
-  function closeScenario(id) {
-    if (scenarios.length <= 1) {
+  function closeTab(id) {
+    if (tabs.length <= 1) {
       return;
     }
 
-    const index = scenarios.findIndex((scenario) => scenario.id === id);
+    const index = tabs.findIndex((tab) => tab.id === id);
     if (index === -1) {
       return;
     }
 
-    if (id === activeScenarioId) {
-      const nextScenario = scenarios[index + 1] || scenarios[index - 1];
-      activeScenarioId = nextScenario.id;
+    if (id === activeTabId) {
+      const nextTab = tabs[index + 1] || tabs[index - 1];
+      activeTabId = nextTab.id;
     } else {
-      saveActiveScenarioState();
+      saveActiveTabState();
     }
 
-    scenarios.splice(index, 1);
-    loadScenarioState(getActiveScenario());
-    renderScenarioTabs();
+    tabs.splice(index, 1);
+    loadTabState(getActiveTab());
+    renderTabs();
     render();
   }
 
   function render() {
     const settings = readSettings();
-    saveActiveScenarioState(settings);
+    saveActiveTabState(settings);
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
