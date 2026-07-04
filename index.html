@@ -6,6 +6,18 @@
   <meta name="description" content="A static academic project website prototype for CREDO, a framework for assessing decision reliability under uncertainty.">
   <title>CREDO | Conformalized Risk Estimation for Decision Optimization</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]]
+      },
+      options: {
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -14,7 +26,6 @@
       <a class="brand" href="#top" aria-label="CREDO home">CREDO</a>
       <div class="nav-links">
         <a href="#interactive-demo">Demo</a>
-        <a href="#context">Context</a>
         <a href="Conformalized%20Decision%20Risk%20Assessment.pdf">Paper</a>
         <a href="#code">Code</a>
         <a href="#citation">Citation</a>
@@ -38,9 +49,9 @@
       </div>
       <aside class="hero-panel" aria-label="Core idea summary">
         <span class="panel-label">Decision risk</span>
-        <p>Estimate when a candidate z falls outside the near-optimal set.</p>
+        <p>Estimate when a candidate \(z\) falls outside the near-optimal set.</p>
         <div class="math-callout">
-          <span>P{ z &notin; &pi;(Y) }</span>
+          <span>\(P\{z \notin \pi(Y)\}\)</span>
         </div>
       </aside>
     </section>
@@ -50,64 +61,99 @@
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
         <h2>Audit a candidate decision in an editable 2D linear program</h2>
         <p class="lead">
-          Compare saved scenarios for the same simplified LP demo.
+          Compare saved tabs for the same simplified fixed-context 2D LP demo.
         </p>
       </div>
 
       <div class="demo-shell" data-credo-demo>
-        <div class="scenario-bar" aria-label="Demo scenario tabs">
-          <div class="scenario-tabs" id="scenario-tabs" role="tablist" aria-label="Demo scenarios"></div>
-          <button class="scenario-add-button" id="scenario-add" type="button">+ Add scenario</button>
+        <div class="tab-bar" aria-label="Demo tabs">
+          <div class="tab-list" id="demo-tabs" role="tablist" aria-label="Demo tabs"></div>
+          <button class="tab-add-button" id="demo-tab-add" type="button">+ Add tab</button>
         </div>
         <span class="sr-only" id="demo-z-value">Current z: (0.00, 0.00)</span>
 
         <form class="demo-controls" aria-label="Interactive CREDO demo controls">
           <div class="demo-control-grid">
-            <label class="control-group" for="demo-vertex-count">
-              <span title="Number of boundary vertices">Vertices</span>
-              <input id="demo-vertex-count" name="vertex-count" type="range" min="1" max="10" step="1" value="3" aria-label="Number of boundary vertices">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-vertex-count">Number of vertices</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About number of vertices" aria-describedby="tip-vertices" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-vertices" role="tooltip">The number of extreme points defining the editable feasible decision region \(Z\).</span>
+                </span>
+              </div>
+              <input id="demo-vertex-count" name="vertex-count" type="range" min="1" max="10" step="1" value="3" aria-describedby="tip-vertices">
               <output id="demo-vertex-count-value" for="demo-vertex-count">3</output>
-            </label>
+            </div>
 
-            <label class="control-group" for="demo-sample-pattern">
-              <span>Sample pattern</span>
-              <select id="demo-sample-pattern" name="sample-pattern">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-sample-pattern">Distribution type</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About distribution type" aria-describedby="tip-distribution" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-distribution" role="tooltip">The distribution type \(P_{Y\mid X=x}\) that the generative model is fitted over to generate outcome samples. In this simplified demo, \(x\) is held fixed.</span>
+                </span>
+              </div>
+              <select id="demo-sample-pattern" name="sample-pattern" aria-describedby="tip-distribution">
                 <option value="baseline">Baseline Gaussian</option>
                 <option value="shifted">Shifted mean</option>
                 <option value="wider">Wider uncertainty</option>
                 <option value="mixture">Two-cluster mixture</option>
               </select>
-            </label>
+            </div>
 
-            <label class="control-group" for="demo-sigma">
-              <span>Uncertainty level &sigma;</span>
-              <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-sigma">Dispersion scale \(\sigma\)</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About dispersion scale sigma" aria-describedby="tip-sigma" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-sigma" role="tooltip">Controls how dispersed the simulated outcome distribution is.</span>
+                </span>
+              </div>
+              <input id="demo-sigma" name="sigma" type="range" min="0.05" max="1" step="0.01" value="0.35" aria-describedby="tip-sigma">
               <output id="demo-sigma-value" for="demo-sigma">0.35</output>
-            </label>
+            </div>
 
-            <label class="control-group" for="demo-k">
-              <span>Generated samples K</span>
-              <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-k">Number of samples \(K\)</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About number of samples K" aria-describedby="tip-k" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-k" role="tooltip">The number \(K\) of generated outcomes used to estimate decision risk.</span>
+                </span>
+              </div>
+              <input id="demo-k" name="k" type="range" min="5" max="150" step="1" value="60" aria-describedby="tip-k">
               <output id="demo-k-value" for="demo-k">60</output>
-            </label>
+            </div>
 
-            <label class="control-group" for="demo-epsilon">
-              <span>Near-optimal tolerance &epsilon;</span>
-              <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-epsilon">Near-optimal tolerance \(\epsilon\)</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About near-optimal tolerance epsilon" aria-describedby="tip-epsilon" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-epsilon" role="tooltip">The tolerance \(\epsilon\) used to determine whether candidate decision \(z\) is near-optimal for an outcome \(y\).</span>
+                </span>
+              </div>
+              <input id="demo-epsilon" name="epsilon" type="range" min="0" max="0.3" step="0.01" value="0.08" aria-describedby="tip-epsilon">
               <output id="demo-epsilon-value" for="demo-epsilon">0.08</output>
-            </label>
+            </div>
 
-            <label class="control-group" for="demo-mode">
-              <span>Risk mode</span>
-              <select id="demo-mode" name="mode">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-mode">Conformalized radius</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About conformalized radius" aria-describedby="tip-mode" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-mode" role="tooltip">Selects the radius construction used in the risk estimator: Monte Carlo, \(p\)-value, or \(e\)-value.</span>
+                </span>
+              </div>
+              <select id="demo-mode" name="mode" aria-describedby="tip-mode">
                 <option value="monte-carlo">Monte Carlo radius R∞</option>
                 <option value="p-value">p-value radius Rp</option>
                 <option value="e-value">e-value radius Re</option>
               </select>
-            </label>
+            </div>
 
             <div class="control-group control-action">
-              <span>Samples</span>
               <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
             </div>
           </div>
@@ -117,12 +163,12 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Decision space</h3>
-              <p>Drag z or the boundary vertices.</p>
+              <p>Drag \(z\) or the boundary vertices.</p>
             </div>
             <canvas id="decision-canvas" width="420" height="420" aria-label="Editable feasible region and selected candidate decision"></canvas>
             <div class="demo-legend" aria-label="Decision space legend">
-              <span><i class="legend-swatch feasible"></i>Feasible region Z</span>
-              <span><i class="legend-dot selected"></i>Selected z</span>
+              <span><i class="legend-swatch feasible"></i>Feasible region \(Z\)</span>
+              <span><i class="legend-dot selected"></i>Selected \(z\)</span>
               <span><i class="legend-dot vertex"></i>Editable boundary vertex</span>
             </div>
           </article>
@@ -130,12 +176,12 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Outcome space</h3>
-              <p>Samples vs. &pi;<sup>-1</sup><sub>&epsilon;</sub>(z).</p>
+              <p>Samples vs. \(\pi^{-1}_{\epsilon}(z)\).</p>
             </div>
             <canvas id="outcome-canvas" width="420" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
             <div class="demo-legend" aria-label="Outcome space legend">
               <span><i class="legend-swatch distribution"></i>Ground-truth simulated outcome density</span>
-              <span><i class="legend-swatch inverse"></i>Inverse feasible region &pi;<sup>-1</sup><sub>&epsilon;</sub>(z)</span>
+              <span><i class="legend-swatch inverse"></i>Inverse feasible region \(\pi^{-1}_{\epsilon}(z)\)</span>
               <span><i class="legend-dot inside"></i>Near-optimal</span>
               <span><i class="legend-dot outside"></i>Not near-optimal</span>
             </div>
@@ -151,7 +197,7 @@
             </div>
             <div class="risk-number" aria-live="polite">
               <span id="risk-value">0.00</span>
-              <small>alpha-hat(z)</small>
+              <small>\(\hat{\alpha}(z)\)</small>
             </div>
             <div class="risk-true" aria-live="polite">
               <strong>Approx. true risk under simulated distribution</strong>
@@ -168,27 +214,6 @@
       <p class="demo-note">
         Simplified 2D LP demo. Conformal-style balls are visual intuition, not full theoretical reproduction.
       </p>
-    </section>
-
-    <section id="context" class="section compact context-section">
-      <div class="section-heading">
-        <p class="eyebrow">Context</p>
-        <h2>What the demo is showing</h2>
-      </div>
-      <div class="cards compact-cards">
-        <article class="card">
-          <h3>Motivation</h3>
-          <p>CREDO asks whether a prescribed decision remains near-optimal after the uncertain outcome is realized, rather than only asking which decision a prediction pipeline returns.</p>
-        </article>
-        <article class="card">
-          <h3>Framework</h3>
-          <p>For a candidate z, the demo shades outcomes where z is near-optimal for an editable feasible region Z, then estimates the mass outside that region.</p>
-        </article>
-        <article class="card">
-          <h3>Results</h3>
-          <p>The paper studies conformal decision-risk assessment more broadly. This page keeps the interactive piece limited to the simplified 2D linear case.</p>
-        </article>
-      </div>
     </section>
 
     <section id="code" class="section compact code-section">
