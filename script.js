@@ -12,9 +12,25 @@ document.addEventListener("DOMContentLoaded", () => {
     [0, 1]
   ];
   const sampleCountMax = 150;
+  const problemClasses = {
+    linear: "linear",
+    quadratic: "quadratic"
+  };
+  const paperQuadraticMatrix = {
+    q11: 0.1,
+    q12: 0,
+    q22: 0.1
+  };
+  const qDiagonalMin = 0.05;
+  const qDiagonalMax = 2;
+  const qOffDiagonalMargin = 1e-4;
+  const quadraticRasterStep = 9;
+  const linearRasterStep = 5;
+  const qpInteriorGridSize = 21;
 
   const controls = {
     zValue: document.getElementById("demo-z-value"),
+    problemClass: document.getElementById("demo-problem-class"),
     vertexCount: document.getElementById("demo-vertex-count"),
     vertexCountValue: document.getElementById("demo-vertex-count-value"),
     samplePattern: document.getElementById("demo-sample-pattern"),
@@ -25,13 +41,22 @@ document.addEventListener("DOMContentLoaded", () => {
     kValue: document.getElementById("demo-k-value"),
     epsilon: document.getElementById("demo-epsilon"),
     epsilonValue: document.getElementById("demo-epsilon-value"),
-    mode: document.getElementById("demo-mode")
+    mode: document.getElementById("demo-mode"),
+    objectiveNote: document.getElementById("demo-objective-note"),
+    qControls: document.getElementById("demo-q-controls"),
+    qSettingLabel: document.getElementById("demo-q-setting-label"),
+    q11: document.getElementById("demo-q11"),
+    q12: document.getElementById("demo-q12"),
+    q22: document.getElementById("demo-q22"),
+    qReset: document.getElementById("demo-q-reset"),
+    qStatus: document.getElementById("demo-q-status")
   };
 
   const demoTabs = document.getElementById("demo-tabs");
   const tabAdd = document.getElementById("demo-tab-add");
   const decisionCanvas = document.getElementById("decision-canvas");
   const outcomeCanvas = document.getElementById("outcome-canvas");
+  const outcomeSubtitle = document.getElementById("outcome-subtitle");
   const outcomeRadiusNote = document.getElementById("outcome-radius-note");
   const riskValue = document.getElementById("risk-value");
   const trueRiskValue = document.getElementById("true-risk-value");
@@ -44,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     || !tabAdd
     || !decisionCanvas
     || !outcomeCanvas
+    || !outcomeSubtitle
     || !outcomeRadiusNote
     || !riskValue
     || !trueRiskValue
@@ -87,6 +113,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentDecisionView = null;
   let currentOutcomeView = null;
   let openTooltipTrigger = null;
+  let renderedProblemClass = "";
+  let renderedQKey = "";
+  let rawQInput = makePaperQ();
+  let activeQ = makePaperQ();
+  let qpCandidateCache = {
+    key: "",
+    candidates: []
+  };
 
   tooltipTriggers.forEach((trigger) => {
     const tooltip = trigger.closest(".control-tooltip");
@@ -162,6 +196,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   controls.vertexCount.addEventListener("input", handleVertexCountChange);
   controls.vertexCount.addEventListener("change", handleVertexCountChange);
+
+  controls.problemClass.addEventListener("input", handleProblemClassChange);
+  controls.problemClass.addEventListener("change", handleProblemClassChange);
+
+  [controls.q11, controls.q12, controls.q22].forEach((control) => {
+    control.dataset.qField = control.id.replace("demo-", "");
+    control.addEventListener("input", handleQInputChange);
+    control.addEventListener("change", formatQInputControls);
+    control.addEventListener("blur", formatQInputControls);
+  });
+
+  controls.qControls.addEventListener("toggle", () => {
+    saveActiveTabState();
+  });
+
+  controls.qReset.addEventListener("click", () => {
+    setQState({ raw: paperQuadraticMatrix, updateInputs: true });
+    invalidateQpCandidateCache();
+    clearSampleSelection();
+    scheduleRender();
+  });
 
   [controls.sigma, controls.k, controls.epsilon].forEach((control) => {
     control.addEventListener("input", scheduleRender);
@@ -289,6 +344,10 @@ document.addEventListener("DOMContentLoaded", () => {
       label,
       selectedZ: vertices[0].slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
+      problemClass: problemClasses.linear,
+      rawQ: makePaperQ(),
+      q: makePaperQ(),
+      qExpanded: false,
       samplePattern: "baseline",
       sigma: 0.35,
       k: 60,
@@ -307,6 +366,10 @@ document.addEventListener("DOMContentLoaded", () => {
       label,
       selectedZ: source.selectedZ.slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
+      problemClass: source.problemClass || problemClasses.linear,
+      rawQ: makePaperQ(),
+      q: makePaperQ(),
+      qExpanded: false,
       samplePattern: source.samplePattern,
       sigma: source.sigma,
       k: source.k,
@@ -329,6 +392,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     tab.selectedZ = selectedZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
+    tab.problemClass = settings ? settings.problemClass : controls.problemClass.value;
+    tab.rawQ = settings ? { ...settings.rawQ } : readRawQ();
+    tab.q = settings ? { ...settings.q } : readActiveQ();
+    tab.qExpanded = controls.qControls.open;
     tab.samplePattern = settings ? settings.samplePattern : controls.samplePattern.value;
     tab.sigma = settings ? settings.sigma : Number.parseFloat(controls.sigma.value);
     tab.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
@@ -340,9 +407,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function loadTabState(tab) {
     boundaryVertices = tab.boundaryVertices.map((vertex) => vertex.slice());
+    invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
     generatedSampleSeed = tab.generatedSampleSeed;
     generatedSamplePairs = tab.generatedSamplePairs.map((pair) => pair.slice());
+    controls.problemClass.value = tab.problemClass || problemClasses.linear;
+    setQState({
+      raw: tab.rawQ || tab.q || paperQuadraticMatrix,
+      active: tab.q,
+      updateInputs: true
+    });
+    controls.qControls.open = Boolean(tab.qExpanded);
     controls.vertexCount.value = String(boundaryVertices.length);
     controls.samplePattern.value = tab.samplePattern;
     controls.sigma.value = String(tab.sigma);
@@ -448,9 +523,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function readSettings() {
     selectedZ = projectToFeasibleRegion(selectedZ);
+    const q = readActiveQ();
+    const problemClass = controls.problemClass.value;
     return {
       z: selectedZ.slice(),
       feasibleVertices: getFeasibleVertices(),
+      problemClass,
+      rawQ: readRawQ(),
+      q,
+      qpCandidates: problemClass === problemClasses.quadratic ? getQpCandidateCache(q).candidates : [],
       samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
@@ -465,6 +546,182 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
+    updateQPanelVisibility(settings.problemClass);
+    updateQStatus(settings.q);
+    updateProblemClassMath(settings.problemClass, settings.q);
+  }
+
+  function updateProblemClassMath(problemClass, q) {
+    const qKey = makeQKey(q);
+    if (renderedProblemClass === problemClass && renderedQKey === qKey) {
+      return;
+    }
+    renderedProblemClass = problemClass;
+    renderedQKey = qKey;
+
+    if (problemClass === problemClasses.quadratic) {
+      controls.objectiveNote.textContent = `Objective: \\(f(z;y)=\\frac{1}{2}z^\\top Qz+y^\\top z\\), \\(Q=\\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}\\). Inverse region and inner-ball distance are numerically approximated.`;
+      outcomeSubtitle.textContent = "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    } else {
+      controls.objectiveNote.textContent = "Objective: \\(f(z;y)=y^\\top z\\).";
+      outcomeSubtitle.textContent = "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    }
+
+    typesetDynamicMath([controls.objectiveNote, outcomeSubtitle]);
+  }
+
+  function typesetDynamicMath(elements) {
+    if (!window.MathJax) {
+      return;
+    }
+
+    if (typeof window.MathJax.typesetPromise === "function") {
+      window.MathJax.typesetPromise(elements).catch(() => {});
+      return;
+    }
+
+    if (window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(() => {
+        if (typeof window.MathJax.typesetPromise === "function") {
+          return window.MathJax.typesetPromise(elements);
+        }
+        return null;
+      }).catch(() => {});
+    }
+  }
+
+  function makePaperQ() {
+    return { ...paperQuadraticMatrix };
+  }
+
+  function readActiveQ() {
+    return { ...activeQ };
+  }
+
+  function readRawQ() {
+    return { ...rawQInput };
+  }
+
+  function setQState(options = {}) {
+    rawQInput = normalizeRawQ(options.raw || rawQInput);
+    const result = sanitizeQ(rawQInput);
+    activeQ = result.q;
+    if (options.active && !qDiffers(options.active, activeQ)) {
+      activeQ = { ...options.active };
+    }
+    updateQ12Bounds(activeQ);
+    if (options.updateInputs) {
+      formatQInputControls();
+    }
+    updateQStatus(activeQ);
+  }
+
+  function normalizeRawQ(q) {
+    const fallback = rawQInput || paperQuadraticMatrix;
+    return {
+      q11: finiteOrFallback(q.q11, fallback.q11),
+      q12: finiteOrFallback(q.q12, fallback.q12),
+      q22: finiteOrFallback(q.q22, fallback.q22)
+    };
+  }
+
+  function sanitizeQ(rawQ) {
+    const q11 = clamp(rawQ.q11, qDiagonalMin, qDiagonalMax);
+    const q22 = clamp(rawQ.q22, qDiagonalMin, qDiagonalMax);
+    const q12Limit = getQ12Limit(q11, q22);
+    const q12 = clamp(rawQ.q12, -q12Limit, q12Limit);
+    return {
+      q: { q11, q12, q22 },
+      adjusted: qDiffers({ q11, q12, q22 }, rawQ)
+    };
+  }
+
+  function finiteOrFallback(value, fallback) {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function getQ12Limit(q11, q22) {
+    return Math.max(0, Math.sqrt(q11 * q22) - qOffDiagonalMargin);
+  }
+
+  function updateQ12Bounds(q) {
+    const limit = getQ12Limit(q.q11, q.q22);
+    controls.q12.min = (-limit).toFixed(4);
+    controls.q12.max = limit.toFixed(4);
+  }
+
+  function updateQPanelVisibility(problemClass) {
+    controls.qControls.hidden = problemClass !== problemClasses.quadratic;
+  }
+
+  function updateQStatus(q) {
+    if (qDiffers(q, rawQInput)) {
+      controls.qStatus.textContent = "Adjusted to keep Q positive definite.";
+    } else if (isPaperQ(q)) {
+      controls.qStatus.textContent = "Paper setting";
+    } else {
+      controls.qStatus.textContent = "Custom positive-definite setting.";
+    }
+    controls.qSettingLabel.textContent = isPaperQ(q) ? "Paper setting" : "Custom Q";
+  }
+
+  function handleQInputChange(event) {
+    const field = event.currentTarget.dataset.qField;
+    const value = Number.parseFloat(event.currentTarget.value);
+    if (field && Number.isFinite(value)) {
+      rawQInput = {
+        ...rawQInput,
+        [field]: value
+      };
+      const result = sanitizeQ(rawQInput);
+      activeQ = result.q;
+      updateQ12Bounds(activeQ);
+      updateQStatus(activeQ);
+    }
+    invalidateQpCandidateCache();
+    clearSampleSelection();
+    scheduleRender();
+  }
+
+  function formatQInputControls() {
+    controls.q11.value = formatControlQValue(rawQInput.q11);
+    controls.q12.value = formatControlQValue(rawQInput.q12);
+    controls.q22.value = formatControlQValue(rawQInput.q22);
+  }
+
+  function isPaperQ(q) {
+    return approximatelyEqual(q.q11, paperQuadraticMatrix.q11)
+      && approximatelyEqual(q.q12, paperQuadraticMatrix.q12)
+      && approximatelyEqual(q.q22, paperQuadraticMatrix.q22);
+  }
+
+  function approximatelyEqual(a, b) {
+    return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1e-9;
+  }
+
+  function qDiffers(a, b) {
+    return !approximatelyEqual(a.q11, b.q11)
+      || !approximatelyEqual(a.q12, b.q12)
+      || !approximatelyEqual(a.q22, b.q22);
+  }
+
+  function makeQKey(q) {
+    return `${q.q11.toFixed(5)},${q.q12.toFixed(5)},${q.q22.toFixed(5)}`;
+  }
+
+  function formatControlQValue(value) {
+    return formatCompactNumber(value);
+  }
+
+  function formatQValue(value) {
+    return formatCompactNumber(value);
+  }
+
+  function formatCompactNumber(value) {
+    if (Math.abs(value) < 1e-9) {
+      return "0";
+    }
+    return value.toFixed(4).replace(/\.?0+$/, "");
   }
 
   function updateOutcomeNote(settings, samples) {
@@ -484,12 +741,12 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices)) {
+    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings)) {
       outcomeRadiusNote.textContent = "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
       return;
     }
 
-    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings.feasibleVertices);
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings);
     if (!Number.isFinite(radius)) {
       outcomeRadiusNote.textContent = "The current degenerate feasible region makes this inverse region unbounded for every generated outcome.";
       return;
@@ -556,12 +813,58 @@ document.addEventListener("DOMContentLoaded", () => {
     return y[0] * z[0] + y[1] * z[1];
   }
 
-  function isNearOptimal(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
+  function quadraticTerm(z, q) {
+    return 0.5 * (
+      q.q11 * z[0] * z[0]
+      + 2 * q.q12 * z[0] * z[1]
+      + q.q22 * z[1] * z[1]
+    );
+  }
+
+  function quadraticObjective(y, z, q) {
+    return quadraticTerm(z, q) + objective(y, z);
+  }
+
+  function isNearOptimal(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
+    if (Array.isArray(settingsOrVertices)) {
+      return isNearOptimalLinear(z, y, epsilon, settingsOrVertices);
+    }
+    if (settingsOrVertices.problemClass === problemClasses.quadratic) {
+      return isNearOptimalQuadratic(z, y, epsilon, settingsOrVertices);
+    }
+    return isNearOptimalLinear(z, y, epsilon, settingsOrVertices.feasibleVertices);
+  }
+
+  function isNearOptimalLinear(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
     if (feasibleVertices.length === 0) {
       return false;
     }
     const best = Math.min(...feasibleVertices.map((vertex) => objective(y, vertex)));
     return objective(y, z) <= best + epsilon + 1e-10;
+  }
+
+  function isNearOptimalQuadratic(z, y, epsilon, settings) {
+    const candidates = settings.qpCandidates.length > 0 ? settings.qpCandidates : getQpCandidateCache(settings.q).candidates;
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    const best = approximateQuadraticMinimum(y, candidates);
+    return quadraticObjective(y, z, settings.q) <= best + epsilon + 1e-10;
+  }
+
+  function approximateQuadraticMinimum(y, candidates) {
+    const y0 = y[0];
+    const y1 = y[1];
+    let best = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const value = candidate.quadraticTerm + y0 * candidate.x + y1 * candidate.y;
+      if (value < best) {
+        best = value;
+      }
+    }
+    return best;
   }
 
   function halfspaceMargins(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
@@ -578,12 +881,44 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((margin) => margin !== null);
   }
 
-  function distanceToBoundary(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
+  function distanceToBoundary(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
+    if (!Array.isArray(settingsOrVertices) && settingsOrVertices.problemClass === problemClasses.quadratic) {
+      return approximateQuadraticDistanceToBoundary(z, y, epsilon, settingsOrVertices);
+    }
+
+    const feasibleVertices = Array.isArray(settingsOrVertices) ? settingsOrVertices : settingsOrVertices.feasibleVertices;
     const margins = halfspaceMargins(z, y, epsilon, feasibleVertices);
     if (margins.length === 0) {
       return Number.POSITIVE_INFINITY;
     }
     return Math.max(0, Math.min(...margins));
+  }
+
+  function approximateQuadraticDistanceToBoundary(z, y, epsilon, settings) {
+    const candidates = settings.qpCandidates.length > 0 ? settings.qpCandidates : getQpCandidateCache(settings.q).candidates;
+    if (candidates.length === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const zQuadraticTerm = quadraticTerm(z, settings.q);
+    const z0 = z[0];
+    const z1 = z[1];
+    const y0 = y[0];
+    const y1 = y[1];
+    let bestMargin = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const a0 = z0 - candidate.x;
+      const a1 = z1 - candidate.y;
+      const norm = Math.hypot(a0, a1);
+      if (norm < 1e-10) {
+        continue;
+      }
+      const signedMargin = candidate.quadraticTerm - zQuadraticTerm + epsilon - (a0 * y0 + a1 * y1);
+      bestMargin = Math.min(bestMargin, signedMargin / norm);
+    }
+
+    return Number.isFinite(bestMargin) ? Math.max(0, bestMargin) : Number.POSITIVE_INFINITY;
   }
 
   function estimateRisk(z, samples, residuals, settings) {
@@ -593,7 +928,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function estimateSampleRisk(z, sample, residuals, settings) {
-    if (!isNearOptimal(z, sample, settings.epsilon, settings.feasibleVertices)) {
+    if (!isNearOptimal(z, sample, settings.epsilon, settings)) {
       return 1;
     }
 
@@ -601,7 +936,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return 0;
     }
 
-    const distance = distanceToBoundary(z, sample, settings.epsilon, settings.feasibleVertices);
+    const distance = distanceToBoundary(z, sample, settings.epsilon, settings);
     if (!Number.isFinite(distance)) {
       return 0;
     }
@@ -626,7 +961,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let failures = 0;
     trueRiskSamples.forEach(([a, b], index) => {
       const sample = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
-      if (!isNearOptimal(z, sample, settings.epsilon, settings.feasibleVertices)) {
+      if (!isNearOptimal(z, sample, settings.epsilon, settings)) {
         failures += 1;
       }
     });
@@ -722,7 +1057,9 @@ document.addEventListener("DOMContentLoaded", () => {
     drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings);
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
-    drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
+    if (settings.problemClass === problemClasses.linear) {
+      drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
+    }
 
     const activeSample = samples[getActiveSampleIndex()];
     if (isConformalRadiusMode(settings.mode) && activeSample) {
@@ -731,7 +1068,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     samples.forEach((sample, index) => {
       const [x, y] = toCanvas(sample);
-      const inside = isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices);
+      const inside = isNearOptimal(settings.z, sample, settings.epsilon, settings);
       if (!pointInPlot(x, y, plot)) {
         return;
       }
@@ -814,7 +1151,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings) {
-    const step = 5;
+    if (settings.problemClass === problemClasses.quadratic) {
+      shadeQuadraticInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
+      return;
+    }
+
+    const step = linearRasterStep;
     ctx.fillStyle = demoColors.inverseFill;
     for (let py = plot.top; py < plot.bottom; py += step) {
       for (let px = plot.left; px < plot.right; px += step) {
@@ -822,11 +1164,49 @@ document.addEventListener("DOMContentLoaded", () => {
           xMin + ((px - plot.left) / (plot.right - plot.left)) * (xMax - xMin),
           yMax - ((py - plot.top) / (plot.bottom - plot.top)) * (yMax - yMin)
         ];
-        if (isNearOptimal(settings.z, y, settings.epsilon, settings.feasibleVertices)) {
+        if (isNearOptimal(settings.z, y, settings.epsilon, settings)) {
           ctx.fillRect(px, py, step + 1, step + 1);
         }
       }
     }
+  }
+
+  function shadeQuadraticInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings) {
+    const candidates = settings.qpCandidates;
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const step = quadraticRasterStep;
+    const xScale = (xMax - xMin) / (plot.right - plot.left);
+    const yScale = (yMax - yMin) / (plot.bottom - plot.top);
+    const z0 = settings.z[0];
+    const z1 = settings.z[1];
+    const zQuadraticTerm = quadraticTerm(settings.z, settings.q);
+
+    ctx.fillStyle = demoColors.inverseFill;
+    for (let py = plot.top; py < plot.bottom; py += step) {
+      const y1 = yMax - (py - plot.top) * yScale;
+      for (let px = plot.left; px < plot.right; px += step) {
+        const y0 = xMin + (px - plot.left) * xScale;
+        if (isNearOptimalQuadraticAt(z0, z1, zQuadraticTerm, y0, y1, settings.epsilon, candidates)) {
+          ctx.fillRect(px, py, step + 1, step + 1);
+        }
+      }
+    }
+  }
+
+  function isNearOptimalQuadraticAt(z0, z1, zQuadraticTerm, y0, y1, epsilon, candidates) {
+    let best = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const value = candidate.quadraticTerm + y0 * candidate.x + y1 * candidate.y;
+      if (value < best) {
+        best = value;
+      }
+    }
+
+    return zQuadraticTerm + y0 * z0 + y1 * z1 <= best + epsilon + 1e-10;
   }
 
   function drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings) {
@@ -856,11 +1236,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax) {
-    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings.feasibleVertices)) {
+    if (!isNearOptimal(settings.z, sample, settings.epsilon, settings)) {
       return;
     }
 
-    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings.feasibleVertices);
+    const radius = distanceToBoundary(settings.z, sample, settings.epsilon, settings);
     if (radius <= 1e-4 || !Number.isFinite(radius)) {
       return;
     }
@@ -962,6 +1342,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const point = clampPointToDecisionView(currentDecisionView.fromCanvas([x, y]));
     if (dragTarget && dragTarget.type === "vertex") {
       boundaryVertices[dragTarget.index] = constrainBoundaryVertexDrag(dragTarget.index, point);
+      invalidateQpCandidateCache();
       selectedZ = projectToFeasibleRegion(selectedZ);
     } else {
       selectedZ = projectToFeasibleRegion(point);
@@ -1000,6 +1381,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isConformalRadiusMode(controls.mode.value)) {
       clearSampleSelection();
     }
+    scheduleRender();
+  }
+
+  function handleProblemClassChange() {
+    clearSampleSelection();
     scheduleRender();
   }
 
@@ -1049,6 +1435,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function setVertexCount(count) {
     const targetCount = Math.max(1, Math.min(10, count || 3));
     boundaryVertices = makeBoundaryVertices(targetCount);
+    invalidateQpCandidateCache();
     controls.vertexCount.value = String(targetCount);
     controls.vertexCountValue.value = String(targetCount);
     selectedZ = projectToFeasibleRegion(selectedZ);
@@ -1079,6 +1466,95 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getFeasibleVertices() {
     return boundaryVertices.map((vertex) => vertex.slice());
+  }
+
+  function invalidateQpCandidateCache() {
+    qpCandidateCache = {
+      key: "",
+      candidates: []
+    };
+  }
+
+  function getQpCandidateCache(q) {
+    const key = `${makeQKey(q)}::${boundaryVertices
+      .map((vertex) => `${vertex[0].toFixed(5)},${vertex[1].toFixed(5)}`)
+      .join("|")}`;
+    if (qpCandidateCache.key === key) {
+      return qpCandidateCache;
+    }
+
+    qpCandidateCache = {
+      key,
+      candidates: makeQpCandidates(boundaryVertices, q)
+    };
+    return qpCandidateCache;
+  }
+
+  function makeQpCandidates(vertices, q) {
+    const candidates = [];
+    const seen = new Set();
+    const addPoint = (point) => {
+      const key = `${point[0].toFixed(5)},${point[1].toFixed(5)}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      const candidatePoint = point.slice();
+      candidates.push({
+        x: candidatePoint[0],
+        y: candidatePoint[1],
+        quadraticTerm: quadraticTerm(candidatePoint, q)
+      });
+    };
+
+    vertices.forEach(addPoint);
+
+    if (vertices.length === 2) {
+      addEdgeSamples(vertices[0], vertices[1], 80, addPoint);
+      return candidates;
+    }
+
+    if (vertices.length > 2) {
+      getPolygonEdges(vertices).forEach(([a, b]) => {
+        addEdgeSamples(a, b, 18, addPoint);
+      });
+      addInteriorGridSamples(vertices, qpInteriorGridSize, addPoint);
+    }
+
+    return candidates;
+  }
+
+  function addEdgeSamples(a, b, count, addPoint) {
+    for (let index = 1; index < count; index += 1) {
+      const t = index / count;
+      addPoint([
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t
+      ]);
+    }
+  }
+
+  function addInteriorGridSamples(vertices, gridSize, addPoint) {
+    const xs = vertices.map((vertex) => vertex[0]);
+    const ys = vertices.map((vertex) => vertex[1]);
+    const xMin = Math.min(...xs);
+    const xMax = Math.max(...xs);
+    const yMin = Math.min(...ys);
+    const yMax = Math.max(...ys);
+    const xSpan = Math.max(1e-9, xMax - xMin);
+    const ySpan = Math.max(1e-9, yMax - yMin);
+
+    for (let row = 0; row < gridSize; row += 1) {
+      for (let col = 0; col < gridSize; col += 1) {
+        const point = [
+          xMin + (col / (gridSize - 1)) * xSpan,
+          yMin + (row / (gridSize - 1)) * ySpan
+        ];
+        if (pointInConvexPolygon(point, vertices)) {
+          addPoint(point);
+        }
+      }
+    }
   }
 
   function projectToFeasibleRegion(point) {
