@@ -59,9 +59,9 @@
     <section id="interactive-demo" class="section demo-section">
       <div class="section-heading">
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
-        <h2>Audit a candidate decision in an editable 2D linear program</h2>
+        <h2>Audit a candidate decision in an editable 2D optimization problem</h2>
         <p class="lead">
-          Compare saved tabs for the same simplified fixed-context 2D LP demo.
+          Compare saved tabs for the same simplified fixed-context 2D linear or quadratic demo.
         </p>
       </div>
 
@@ -74,6 +74,20 @@
 
         <form class="demo-controls" aria-label="Interactive CREDO demo controls">
           <div class="demo-control-grid">
+            <div class="control-group">
+              <div class="control-label-row">
+                <label for="demo-problem-class">Problem class</label>
+                <span class="control-tooltip">
+                  <button class="tooltip-trigger" type="button" aria-label="About problem class" aria-describedby="tip-problem-class" aria-expanded="false">?</button>
+                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between the original linear objective and a simplified convex quadratic objective.</span>
+                </span>
+              </div>
+              <select id="demo-problem-class" name="problem-class" aria-describedby="tip-problem-class">
+                <option value="linear">Linear program</option>
+                <option value="quadratic">Quadratic program</option>
+              </select>
+            </div>
+
             <div class="control-group">
               <div class="control-label-row">
                 <label for="demo-vertex-count">Number of vertices</label>
@@ -148,8 +162,8 @@
               </div>
               <select id="demo-mode" name="mode" aria-describedby="tip-mode">
                 <option value="monte-carlo">Monte Carlo radius R∞</option>
-                <option value="p-value">p-value radius Rp</option>
-                <option value="e-value">e-value radius Re</option>
+                <option value="p-value">p-value radius Rₚ</option>
+                <option value="e-value">e-value radius Rₑ</option>
               </select>
             </div>
 
@@ -157,6 +171,29 @@
               <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
             </div>
           </div>
+          <p class="objective-note" id="demo-objective-note">Objective: \(f(z;y)=y^\top z\).</p>
+          <details class="q-controls" id="demo-q-controls" hidden>
+            <summary>
+              <span>Customize \(Q\)</span>
+              <strong id="demo-q-setting-label">Paper setting</strong>
+            </summary>
+            <div class="q-control-grid" aria-label="Quadratic matrix controls">
+              <label>
+                <span>q₁₁</span>
+                <input id="demo-q11" name="q11" type="number" min="0.05" max="2" step="0.01" value="0.10" inputmode="decimal">
+              </label>
+              <label>
+                <span>q₁₂</span>
+                <input id="demo-q12" name="q12" type="number" min="-0.09" max="0.09" step="0.01" value="0.00" inputmode="decimal">
+              </label>
+              <label>
+                <span>q₂₂</span>
+                <input id="demo-q22" name="q22" type="number" min="0.05" max="2" step="0.01" value="0.10" inputmode="decimal">
+              </label>
+              <button class="q-reset-button" id="demo-q-reset" type="button">Reset to paper setting</button>
+            </div>
+            <p class="q-status" id="demo-q-status" aria-live="polite">Paper setting.</p>
+          </details>
         </form>
 
         <div class="demo-grid">
@@ -176,7 +213,7 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3>Outcome space</h3>
-              <p>Samples vs. \(\pi^{-1}_{\epsilon}(z)\).</p>
+              <p id="outcome-subtitle">Samples vs. \(\pi^{-1}_{\epsilon}(z)\).</p>
             </div>
             <canvas id="outcome-canvas" width="420" height="420" aria-label="Outcome samples and inverse feasible region"></canvas>
             <div class="demo-legend" aria-label="Outcome space legend">
@@ -212,7 +249,7 @@
       </div>
 
       <p class="demo-note">
-        Simplified 2D LP demo. Conformal-style balls are visual intuition, not full theoretical reproduction.
+        Simplified 2D linear/quadratic demo. Conformal-style balls are visual intuition, not full theoretical reproduction.
       </p>
     </section>
 

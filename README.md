@@ -10,7 +10,7 @@ Wenbin Zhou, Agni Orfanoudaki, Shixiang Zhu
 
 - `index.html` contains the project page content and section structure.
 - `style.css` contains all styling and responsive layout rules.
-- `script.js` contains the dependency-free interactive 2D linear demo and tab state management.
+- `script.js` contains the dependency-free interactive 2D linear/quadratic demo and tab state management.
 - `Conformalized Decision Risk Assessment.pdf` is linked from the Paper button when present in the project root.
 
 ## Local Preview
@@ -30,4 +30,4 @@ This repository is ready to deploy as a static site from the repository root usi
 
 ## Demo Scope
 
-The current interactive demo is intentionally limited to a simplified fixed-context/marginal 2D linear program visualization. Tabs preserve independent demo states for comparison, but convex/quadratic demos, real-world model training, contextualized covariates, and 3D views are future work and are not implemented in this static prototype.
+The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations. The quadratic demo defaults to the paper's stylized QP matrix `Q = 0.1I`, with an optional control for exploring other symmetric positive-definite 2x2 matrices. Tabs preserve independent demo states for comparison, including the selected problem class. Integer/discrete optimization, full real-world model training, contextualized covariates, and 3D views are future work and are not implemented in this static prototype. The browser visualization is educational and does not reproduce Algorithm 2 or the paper's theoretical guarantees.
