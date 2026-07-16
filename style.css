@@ -471,6 +471,7 @@ h3 {
 }
 
 .control-button {
+  grid-row: 2;
   width: 100%;
   min-height: 30px;
   padding: 0 10px;
@@ -511,6 +512,10 @@ h3 {
 
 .control-action {
   grid-template-columns: 1fr;
+}
+
+.demo-control-grid:has(#demo-vertex-control[hidden]) > .control-action {
+  grid-column: span 2;
 }
 
 .control-tooltip {
@@ -608,11 +613,13 @@ h3 {
 
 .objective-note {
   margin: 7px 0 0;
+  max-width: 100%;
   color: var(--muted);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .q-controls {
@@ -1188,6 +1195,12 @@ h3 {
     left: auto;
   }
 
+  .demo-control-grid:has(#demo-vertex-control[hidden]) > .control-group:has(#demo-k) .tooltip-popover {
+    --tooltip-x: 0;
+    right: 0;
+    left: auto;
+  }
+
   .demo-grid {
     grid-template-columns: repeat(2, minmax(260px, 1fr));
   }
@@ -1239,6 +1252,18 @@ h3 {
     min-width: 0;
   }
 
+  .control-action {
+    grid-template-rows: 30px;
+  }
+
+  .control-action .control-button {
+    grid-row: 1;
+  }
+
+  .demo-control-grid:has(#demo-vertex-control[hidden]) > .control-action {
+    grid-column: auto;
+  }
+
   .control-tooltip {
     position: static;
   }
@@ -1246,7 +1271,8 @@ h3 {
   .demo-control-grid > .control-group .tooltip-popover,
   .demo-control-grid > .control-group:nth-child(4n+1) .tooltip-popover,
   .demo-control-grid > .control-group:nth-child(4n) .tooltip-popover,
-  .demo-control-grid > .control-group:nth-child(8) .tooltip-popover {
+  .demo-control-grid > .control-group:nth-child(8) .tooltip-popover,
+  .demo-control-grid:has(#demo-vertex-control[hidden]) > .control-group:has(#demo-k) .tooltip-popover {
     --tooltip-x: 0;
     right: auto;
     left: 0;
