@@ -14,8 +14,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const sampleCountMax = 150;
   const problemClasses = {
     linear: "linear",
-    quadratic: "quadratic"
+    quadratic: "quadratic",
+    binaryKnapsack: "binary-knapsack"
   };
+  const defaultKnapsackSelection = [1, 1, 0, 0];
+  const knapsackCapacity = 6;
+  const knapsackItems = [
+    { label: "Item 1", weight: 2, coeff: [0.95, 0.18], base: 0.34 },
+    { label: "Item 2", weight: 3, coeff: [0.22, 0.9], base: 0.3 },
+    { label: "Item 3", weight: 4, coeff: [0.68, -0.24], base: 0.52 },
+    { label: "Item 4", weight: 5, coeff: [-0.18, 0.76], base: 0.62 }
+  ];
   const paperQuadraticMatrix = {
     q11: 0.1,
     q12: 0,
@@ -49,18 +58,29 @@ document.addEventListener("DOMContentLoaded", () => {
     q12: document.getElementById("demo-q12"),
     q22: document.getElementById("demo-q22"),
     qReset: document.getElementById("demo-q-reset"),
-    qStatus: document.getElementById("demo-q-status")
+    qStatus: document.getElementById("demo-q-status"),
+    vertexControl: document.getElementById("demo-vertex-control")
   };
 
   const demoTabs = document.getElementById("demo-tabs");
   const tabAdd = document.getElementById("demo-tab-add");
   const decisionCanvas = document.getElementById("decision-canvas");
+  const decisionHeading = document.getElementById("decision-heading");
+  const decisionSubtitle = document.getElementById("decision-subtitle");
+  const decisionLegend = document.getElementById("decision-legend");
+  const knapsackPanel = document.getElementById("knapsack-panel");
+  const knapsackItemsEl = document.getElementById("knapsack-items");
+  const knapsackWeightSummary = document.getElementById("knapsack-weight-summary");
+  const knapsackVectorSummary = document.getElementById("knapsack-vector-summary");
+  const knapsackCapacityFill = document.getElementById("knapsack-capacity-fill");
+  const knapsackStatus = document.getElementById("knapsack-status");
   const outcomeCanvas = document.getElementById("outcome-canvas");
   const outcomeSubtitle = document.getElementById("outcome-subtitle");
   const outcomeRadiusNote = document.getElementById("outcome-radius-note");
   const riskValue = document.getElementById("risk-value");
   const trueRiskValue = document.getElementById("true-risk-value");
   const riskBars = document.getElementById("risk-bars");
+  const riskExplainer = document.getElementById("risk-explainer");
   const tooltipTriggers = Array.from(root.querySelectorAll(".tooltip-trigger"));
 
   if (
@@ -68,12 +88,22 @@ document.addEventListener("DOMContentLoaded", () => {
     || !demoTabs
     || !tabAdd
     || !decisionCanvas
+    || !decisionHeading
+    || !decisionSubtitle
+    || !decisionLegend
+    || !knapsackPanel
+    || !knapsackItemsEl
+    || !knapsackWeightSummary
+    || !knapsackVectorSummary
+    || !knapsackCapacityFill
+    || !knapsackStatus
     || !outcomeCanvas
     || !outcomeSubtitle
     || !outcomeRadiusNote
     || !riskValue
     || !trueRiskValue
     || !riskBars
+    || !riskExplainer
   ) {
     return;
   }
@@ -104,6 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeTabId = tabs[0].id;
   let boundaryVertices = [];
   let selectedZ = [0, 0];
+  let selectedKnapsackZ = defaultKnapsackSelection.slice();
   let generatedSampleSeed = 24591;
   let generatedSamplePairs = [];
   let scheduled = false;
@@ -120,6 +151,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let qpCandidateCache = {
     key: "",
     candidates: []
+  };
+  let knapsackDecisionCache = {
+    key: "",
+    decisions: []
   };
 
   tooltipTriggers.forEach((trigger) => {
@@ -235,7 +270,18 @@ document.addEventListener("DOMContentLoaded", () => {
   controls.mode.addEventListener("input", handleModeChange);
   controls.mode.addEventListener("change", handleModeChange);
 
+  knapsackItemsEl.addEventListener("click", (event) => {
+    const itemButton = event.target.closest("[data-knapsack-item]");
+    if (!itemButton) {
+      return;
+    }
+    toggleKnapsackItem(Number.parseInt(itemButton.dataset.knapsackItem, 10));
+  });
+
   decisionCanvas.addEventListener("pointerdown", (event) => {
+    if (controls.problemClass.value === problemClasses.binaryKnapsack) {
+      return;
+    }
     if (!currentDecisionView) {
       return;
     }
@@ -343,6 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: vertices[0].slice(),
+      selectedKnapsackZ: defaultKnapsackSelection.slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
       problemClass: problemClasses.linear,
       rawQ: makePaperQ(),
@@ -365,6 +412,7 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: source.selectedZ.slice(),
+      selectedKnapsackZ: (source.selectedKnapsackZ || defaultKnapsackSelection).slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
       problemClass: source.problemClass || problemClasses.linear,
       rawQ: makePaperQ(),
@@ -391,6 +439,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     tab.selectedZ = selectedZ.slice();
+    tab.selectedKnapsackZ = selectedKnapsackZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
     tab.problemClass = settings ? settings.problemClass : controls.problemClass.value;
     tab.rawQ = settings ? { ...settings.rawQ } : readRawQ();
@@ -409,6 +458,7 @@ document.addEventListener("DOMContentLoaded", () => {
     boundaryVertices = tab.boundaryVertices.map((vertex) => vertex.slice());
     invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
+    selectedKnapsackZ = normalizeKnapsackSelection(tab.selectedKnapsackZ || defaultKnapsackSelection);
     generatedSampleSeed = tab.generatedSampleSeed;
     generatedSamplePairs = tab.generatedSamplePairs.map((pair) => pair.slice());
     controls.problemClass.value = tab.problemClass || problemClasses.linear;
@@ -502,9 +552,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
-    const boundaryRisks = boundaryVertices.map((vertex) => {
-      return estimateRisk(vertex, samples, residuals, settings);
-    });
+    const comparisonRisks = settings.problemClass === problemClasses.binaryKnapsack
+      ? settings.knapsackDecisions.map((decision) => estimateRisk(decision.z, samples, residuals, settings))
+      : boundaryVertices.map((vertex) => estimateRisk(vertex, samples, residuals, settings));
     const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
 
     if (pinnedSampleIndex !== null && pinnedSampleIndex >= samples.length) {
@@ -515,23 +565,33 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     updateOutputs(settings);
-    drawDecisionSpace(decisionCanvas, settings.z);
+    if (settings.problemClass === problemClasses.binaryKnapsack) {
+      currentDecisionView = null;
+    } else {
+      drawDecisionSpace(decisionCanvas, settings.z);
+    }
     drawOutcomeSpace(outcomeCanvas, settings, samples);
     updateOutcomeNote(settings, samples);
-    updateRiskPanel(settings, selectedRisk, approximateTrueRisk, boundaryRisks);
+    updateRiskPanel(settings, selectedRisk, approximateTrueRisk, comparisonRisks);
   }
 
   function readSettings() {
-    selectedZ = projectToFeasibleRegion(selectedZ);
-    const q = readActiveQ();
     const problemClass = controls.problemClass.value;
+    if (problemClass === problemClasses.binaryKnapsack) {
+      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ);
+    } else {
+      selectedZ = projectToFeasibleRegion(selectedZ);
+    }
+    const q = readActiveQ();
+    const knapsackDecisions = problemClass === problemClasses.binaryKnapsack ? getKnapsackDecisionCache().decisions : [];
     return {
-      z: selectedZ.slice(),
+      z: problemClass === problemClasses.binaryKnapsack ? selectedKnapsackZ.slice() : selectedZ.slice(),
       feasibleVertices: getFeasibleVertices(),
       problemClass,
       rawQ: readRawQ(),
       q,
       qpCandidates: problemClass === problemClasses.quadratic ? getQpCandidateCache(q).candidates : [],
+      knapsackDecisions,
       samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
@@ -541,7 +601,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateOutputs(settings) {
-    controls.zValue.textContent = `Current z: ${formatPoint(settings.z)}`;
+    controls.zValue.textContent = settings.problemClass === problemClasses.binaryKnapsack
+      ? `Current subset: z = ${formatBinaryVector(settings.z)}`
+      : `Current z: ${formatPoint(settings.z)}`;
     controls.vertexCountValue.value = String(boundaryVertices.length);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
@@ -549,6 +611,8 @@ document.addEventListener("DOMContentLoaded", () => {
     updateQPanelVisibility(settings.problemClass);
     updateQStatus(settings.q);
     updateProblemClassMath(settings.problemClass, settings.q);
+    updateModeVisibility(settings);
+    updateKnapsackPanel(settings);
   }
 
   function updateProblemClassMath(problemClass, q) {
@@ -562,6 +626,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (problemClass === problemClasses.quadratic) {
       controls.objectiveNote.textContent = `Objective: \\(f(z;y)=\\frac{1}{2}z^\\top Qz+y^\\top z\\), \\(Q=\\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}\\). Inverse region and inner-ball distance are numerically approximated.`;
       outcomeSubtitle.textContent = "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    } else if (problemClass === problemClasses.binaryKnapsack) {
+      controls.objectiveNote.textContent = "Objective: maximize \\(V(z;y)=\\sum_i z_i(a_i^\\top y+b_i)\\), subject to \\(\\sum_i w_i z_i\\le C\\), \\(z_i\\in\\{0,1\\}\\). Feasible subsets are enumerated exactly.";
+      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected subset.";
     } else {
       controls.objectiveNote.textContent = "Objective: \\(f(z;y)=y^\\top z\\).";
       outcomeSubtitle.textContent = "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
@@ -654,6 +721,24 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.qControls.hidden = problemClass !== problemClasses.quadratic;
   }
 
+  function updateModeVisibility(settings) {
+    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
+    controls.vertexControl.hidden = isKnapsack;
+    controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic;
+    decisionCanvas.hidden = isKnapsack;
+    knapsackPanel.hidden = !isKnapsack;
+    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && decisionCanvas.classList.contains("is-dragging"));
+    decisionHeading.textContent = isKnapsack ? "Subset selection" : "Decision space";
+    decisionSubtitle.textContent = isKnapsack
+      ? "Toggle items to choose a feasible binary subset."
+      : "Drag \\(z\\) or the boundary vertices.";
+    decisionLegend.hidden = isKnapsack;
+    riskExplainer.textContent = isKnapsack
+      ? "The knapsack optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite-decision boundary margin."
+      : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
+    typesetDynamicMath([decisionSubtitle, riskExplainer]);
+  }
+
   function updateQStatus(q) {
     if (qDiffers(q, rawQInput)) {
       controls.qStatus.textContent = "Adjusted to keep Q positive definite.";
@@ -736,13 +821,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     outcomeRadiusNote.hidden = false;
     const sample = samples[getActiveSampleIndex()];
+    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
     if (!sample) {
-      outcomeRadiusNote.textContent = "Hover or click a generated sample to inspect its conformal-style inner ball.";
+      outcomeRadiusNote.textContent = isKnapsack
+        ? "Hover or click a generated sample to inspect its finite-decision margin."
+        : "Hover or click a generated sample to inspect its conformal-style inner ball.";
       return;
     }
 
     if (!isNearOptimal(settings.z, sample, settings.epsilon, settings)) {
-      outcomeRadiusNote.textContent = "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
+      outcomeRadiusNote.textContent = isKnapsack
+        ? "This sample is outside the selected subset's inverse near-optimal region, so no positive finite-decision margin is certified."
+        : "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
       return;
     }
 
@@ -752,11 +842,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (radius <= 1e-4) {
-      outcomeRadiusNote.textContent = "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
+      outcomeRadiusNote.textContent = isKnapsack
+        ? "This sample is on or too close to a competing-subset boundary, so the finite-decision margin is effectively zero."
+        : "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
       return;
     }
 
-    outcomeRadiusNote.textContent = `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
+    outcomeRadiusNote.textContent = isKnapsack
+      ? `Finite-decision distance to the nearest competing-subset boundary: ${radius.toFixed(3)}.`
+      : `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
   function generateSamples(sourcePairs, settings) {
@@ -813,6 +907,20 @@ document.addEventListener("DOMContentLoaded", () => {
     return y[0] * z[0] + y[1] * z[1];
   }
 
+  function knapsackItemValue(item, y) {
+    return item.coeff[0] * y[0] + item.coeff[1] * y[1] + item.base;
+  }
+
+  function knapsackValue(z, y) {
+    return z.reduce((sum, selected, index) => {
+      return sum + selected * knapsackItemValue(knapsackItems[index], y);
+    }, 0);
+  }
+
+  function knapsackWeight(z) {
+    return z.reduce((sum, selected, index) => sum + selected * knapsackItems[index].weight, 0);
+  }
+
   function quadraticTerm(z, q) {
     return 0.5 * (
       q.q11 * z[0] * z[0]
@@ -828,6 +936,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function isNearOptimal(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
     if (Array.isArray(settingsOrVertices)) {
       return isNearOptimalLinear(z, y, epsilon, settingsOrVertices);
+    }
+    if (settingsOrVertices.problemClass === problemClasses.binaryKnapsack) {
+      return isNearOptimalKnapsack(z, y, epsilon, settingsOrVertices);
     }
     if (settingsOrVertices.problemClass === problemClasses.quadratic) {
       return isNearOptimalQuadratic(z, y, epsilon, settingsOrVertices);
@@ -851,6 +962,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const best = approximateQuadraticMinimum(y, candidates);
     return quadraticObjective(y, z, settings.q) <= best + epsilon + 1e-10;
+  }
+
+  function isNearOptimalKnapsack(z, y, epsilon, settings) {
+    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache().decisions;
+    if (decisions.length === 0 || knapsackWeight(z) > knapsackCapacity) {
+      return false;
+    }
+
+    // Knapsack is a maximization example. Keep this sign convention explicit
+    // rather than reusing the continuous minimization helper.
+    const selectedValue = knapsackValue(z, y);
+    const bestValue = Math.max(...decisions.map((decision) => knapsackValue(decision.z, y)));
+    return selectedValue >= bestValue - epsilon - 1e-10;
   }
 
   function approximateQuadraticMinimum(y, candidates) {
@@ -882,6 +1006,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function distanceToBoundary(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
+    if (!Array.isArray(settingsOrVertices) && settingsOrVertices.problemClass === problemClasses.binaryKnapsack) {
+      return knapsackDistanceToBoundary(z, y, epsilon, settingsOrVertices);
+    }
     if (!Array.isArray(settingsOrVertices) && settingsOrVertices.problemClass === problemClasses.quadratic) {
       return approximateQuadraticDistanceToBoundary(z, y, epsilon, settingsOrVertices);
     }
@@ -892,6 +1019,41 @@ document.addEventListener("DOMContentLoaded", () => {
       return Number.POSITIVE_INFINITY;
     }
     return Math.max(0, Math.min(...margins));
+  }
+
+  function knapsackDistanceToBoundary(z, y, epsilon, settings) {
+    const margins = knapsackHalfspaceMargins(z, y, epsilon, settings);
+    if (margins.length === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Math.max(0, Math.min(...margins));
+  }
+
+  function knapsackHalfspaceMargins(z, y, epsilon, settings) {
+    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache().decisions;
+    return decisions
+      .map((decision) => makeKnapsackComparison(z, decision.z))
+      .filter((comparison) => comparison.norm >= 1e-10)
+      .map((comparison) => {
+        const signedMargin = comparison.coeff[0] * y[0] + comparison.coeff[1] * y[1] + comparison.base + epsilon;
+        return signedMargin / comparison.norm;
+      });
+  }
+
+  function makeKnapsackComparison(z, competitorZ) {
+    const coeff = [0, 0];
+    let base = 0;
+    for (let index = 0; index < knapsackItems.length; index += 1) {
+      const diff = z[index] - competitorZ[index];
+      coeff[0] += diff * knapsackItems[index].coeff[0];
+      coeff[1] += diff * knapsackItems[index].coeff[1];
+      base += diff * knapsackItems[index].base;
+    }
+    return {
+      coeff,
+      base,
+      norm: Math.hypot(coeff[0], coeff[1])
+    };
   }
 
   function approximateQuadraticDistanceToBoundary(z, y, epsilon, settings) {
@@ -1057,7 +1219,7 @@ document.addEventListener("DOMContentLoaded", () => {
     drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings);
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
-    if (settings.problemClass === problemClasses.linear) {
+    if (settings.problemClass === problemClasses.linear || settings.problemClass === problemClasses.binaryKnapsack) {
       drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
     }
 
@@ -1215,24 +1377,39 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = demoColors.inverseBoundary;
 
-    settings.feasibleVertices.forEach((vertex) => {
-      const a = [settings.z[0] - vertex[0], settings.z[1] - vertex[1]];
-      if (Math.hypot(a[0], a[1]) < 1e-10) {
-        return;
-      }
-      const points = boundaryIntersections(a, settings.epsilon, xMin, xMax, yMin, yMax);
-      if (points.length < 2) {
-        return;
-      }
-      const p0 = toCanvas(points[0]);
-      const p1 = toCanvas(points[1]);
-      ctx.beginPath();
-      ctx.moveTo(p0[0], p0[1]);
-      ctx.lineTo(p1[0], p1[1]);
-      ctx.stroke();
-    });
+    if (settings.problemClass === problemClasses.binaryKnapsack) {
+      settings.knapsackDecisions.forEach((decision) => {
+        const comparison = makeKnapsackComparison(settings.z, decision.z);
+        if (comparison.norm < 1e-10) {
+          return;
+        }
+        const points = boundaryIntersections(comparison.coeff, -comparison.base - settings.epsilon, xMin, xMax, yMin, yMax);
+        drawBoundaryLine(ctx, toCanvas, points);
+      });
+    } else {
+      settings.feasibleVertices.forEach((vertex) => {
+        const a = [settings.z[0] - vertex[0], settings.z[1] - vertex[1]];
+        if (Math.hypot(a[0], a[1]) < 1e-10) {
+          return;
+        }
+        const points = boundaryIntersections(a, settings.epsilon, xMin, xMax, yMin, yMax);
+        drawBoundaryLine(ctx, toCanvas, points);
+      });
+    }
 
     ctx.restore();
+  }
+
+  function drawBoundaryLine(ctx, toCanvas, points) {
+    if (points.length < 2) {
+      return;
+    }
+    const p0 = toCanvas(points[0]);
+    const p1 = toCanvas(points[1]);
+    ctx.beginPath();
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
+    ctx.stroke();
   }
 
   function drawSelectedConformalBall(ctx, settings, sample, toCanvas, plot, xMin, xMax) {
@@ -1262,35 +1439,44 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  function updateRiskPanel(settings, selectedRisk, approximateTrueRisk, boundaryRisks) {
+  function updateRiskPanel(settings, selectedRisk, approximateTrueRisk, comparisonRisks) {
     riskValue.textContent = selectedRisk.toFixed(2);
     trueRiskValue.textContent = approximateTrueRisk.toFixed(2);
     riskBars.replaceChildren();
+    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
 
     riskBars.append(makeRiskRow({
-      label: `selected ${formatPoint(settings.z)}`,
+      label: isKnapsack ? `selected subset ${formatBinaryVector(settings.z)}` : `selected ${formatPoint(settings.z)}`,
       risk: selectedRisk,
       selected: true
     }));
 
-    if (boundaryRisks.length === 0) {
+    if (comparisonRisks.length === 0) {
       return;
     }
 
-    const boundarySummary = summarizeBoundaryRisks(boundaryRisks);
+    const boundarySummary = summarizeBoundaryRisks(comparisonRisks);
     const summary = document.createElement("div");
     summary.className = "risk-boundary-summary";
-    summary.textContent = `Boundary vertices (${boundaryRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
+    summary.textContent = isKnapsack
+      ? `Feasible subsets (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`
+      : `Boundary vertices (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
     riskBars.append(summary);
 
-    if (boundaryRisks.length > 1) {
+    if (comparisonRisks.length > 1) {
+      const bestLabel = isKnapsack
+        ? `best feasible subset ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.min.index].z)}`
+        : `best boundary v${boundarySummary.min.index + 1}`;
+      const worstLabel = isKnapsack
+        ? `worst feasible subset ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.max.index].z)}`
+        : `worst boundary v${boundarySummary.max.index + 1}`;
       riskBars.append(makeRiskRow({
-        label: `best boundary v${boundarySummary.min.index + 1}`,
+        label: bestLabel,
         risk: boundarySummary.min.risk,
         selected: false
       }));
       riskBars.append(makeRiskRow({
-        label: `worst boundary v${boundarySummary.max.index + 1}`,
+        label: worstLabel,
         risk: boundarySummary.max.risk,
         selected: false
       }));
@@ -1335,6 +1521,96 @@ document.addEventListener("DOMContentLoaded", () => {
       sum: 0,
       average: 0
     });
+  }
+
+  function updateKnapsackPanel(settings) {
+    if (settings.problemClass !== problemClasses.binaryKnapsack) {
+      return;
+    }
+
+    const totalWeight = knapsackWeight(settings.z);
+    knapsackWeightSummary.textContent = `Weight ${totalWeight} / ${knapsackCapacity}`;
+    knapsackVectorSummary.textContent = `z = ${formatBinaryVector(settings.z)}`;
+    knapsackCapacityFill.style.width = `${Math.min(100, (totalWeight / knapsackCapacity) * 100).toFixed(1)}%`;
+    renderKnapsackItems(settings.z);
+  }
+
+  function renderKnapsackItems(z) {
+    knapsackItemsEl.replaceChildren();
+    knapsackItems.forEach((item, index) => {
+      const selected = z[index] === 1;
+      const button = document.createElement("button");
+      button.className = `knapsack-item${selected ? " is-selected" : ""}`;
+      button.type = "button";
+      button.dataset.knapsackItem = String(index);
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+      button.setAttribute("aria-label", `${item.label}, weight ${item.weight}, ${selected ? "selected" : "unselected"}`);
+
+      const title = document.createElement("span");
+      title.className = "knapsack-item-title";
+      title.textContent = item.label;
+
+      const state = document.createElement("span");
+      state.className = "knapsack-item-state";
+      state.textContent = selected ? "Selected" : "Off";
+
+      const weight = document.createElement("span");
+      weight.className = "knapsack-item-weight";
+      weight.textContent = `weight ${item.weight}`;
+
+      button.append(title, state, weight);
+      knapsackItemsEl.append(button);
+    });
+  }
+
+  function toggleKnapsackItem(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= knapsackItems.length) {
+      return;
+    }
+    const next = selectedKnapsackZ.slice();
+    next[index] = next[index] === 1 ? 0 : 1;
+    if (knapsackWeight(next) > knapsackCapacity) {
+      knapsackStatus.textContent = `${knapsackItems[index].label} would exceed capacity ${knapsackCapacity}; selection was not changed.`;
+      return;
+    }
+
+    selectedKnapsackZ = next;
+    knapsackStatus.textContent = `${knapsackItems[index].label} ${next[index] === 1 ? "selected" : "cleared"}.`;
+    clearSampleSelection();
+    scheduleRender();
+  }
+
+  function normalizeKnapsackSelection(selection) {
+    const normalized = knapsackItems.map((_, index) => selection[index] === 1 ? 1 : 0);
+    if (knapsackWeight(normalized) <= knapsackCapacity) {
+      return normalized;
+    }
+    return defaultKnapsackSelection.slice();
+  }
+
+  function getKnapsackDecisionCache() {
+    const key = `${knapsackCapacity}::${knapsackItems.map((item) => item.weight).join(",")}`;
+    if (knapsackDecisionCache.key === key) {
+      return knapsackDecisionCache;
+    }
+    knapsackDecisionCache = {
+      key,
+      decisions: enumerateFeasibleKnapsackDecisions()
+    };
+    return knapsackDecisionCache;
+  }
+
+  function enumerateFeasibleKnapsackDecisions() {
+    const decisions = [];
+    const count = 2 ** knapsackItems.length;
+    for (let mask = 0; mask < count; mask += 1) {
+      const z = knapsackItems.map((_, index) => (mask & (1 << index)) ? 1 : 0);
+      const weight = knapsackWeight(z);
+      if (weight <= knapsackCapacity) {
+        decisions.push({ z, weight });
+      }
+    }
+    return decisions;
   }
 
   function updateDecisionDragFromEvent(event) {
@@ -1386,6 +1662,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleProblemClassChange() {
     clearSampleSelection();
+    if (controls.problemClass.value === problemClasses.binaryKnapsack) {
+      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ);
+      knapsackStatus.textContent = "";
+    }
     scheduleRender();
   }
 
@@ -1939,6 +2219,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function formatPoint(point) {
     return `(${point[0].toFixed(2)}, ${point[1].toFixed(2)})`;
+  }
+
+  function formatBinaryVector(vector) {
+    return `(${vector.map((value) => value === 1 ? "1" : "0").join(",")})`;
   }
 
   function isConformalRadiusMode(mode) {
