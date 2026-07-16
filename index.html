@@ -61,7 +61,7 @@
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
         <h2>Audit a candidate decision in an editable 2D optimization problem</h2>
         <p class="lead">
-          Compare saved tabs for the same simplified fixed-context 2D linear or quadratic demo.
+          Compare saved tabs for simplified fixed-context linear, quadratic, and binary knapsack demos.
         </p>
       </div>
 
@@ -79,16 +79,17 @@
                 <label for="demo-problem-class">Problem class</label>
                 <span class="control-tooltip">
                   <button class="tooltip-trigger" type="button" aria-label="About problem class" aria-describedby="tip-problem-class" aria-expanded="false">?</button>
-                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between the original linear objective and a simplified convex quadratic objective.</span>
+                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between the original linear objective, a simplified convex quadratic objective, and a finite binary knapsack example.</span>
                 </span>
               </div>
               <select id="demo-problem-class" name="problem-class" aria-describedby="tip-problem-class">
                 <option value="linear">Linear program</option>
                 <option value="quadratic">Quadratic program</option>
+                <option value="binary-knapsack">Binary knapsack</option>
               </select>
             </div>
 
-            <div class="control-group">
+            <div class="control-group" id="demo-vertex-control">
               <div class="control-label-row">
                 <label for="demo-vertex-count">Number of vertices</label>
                 <span class="control-tooltip">
@@ -199,11 +200,24 @@
         <div class="demo-grid">
           <article class="demo-panel">
             <div class="demo-panel-heading">
-              <h3>Decision space</h3>
-              <p>Drag \(z\) or the boundary vertices.</p>
+              <h3 id="decision-heading">Decision space</h3>
+              <p id="decision-subtitle">Drag \(z\) or the boundary vertices.</p>
             </div>
             <canvas id="decision-canvas" width="420" height="420" aria-label="Editable feasible region and selected candidate decision"></canvas>
-            <div class="demo-legend" aria-label="Decision space legend">
+            <div class="knapsack-panel" id="knapsack-panel" hidden aria-label="Binary knapsack item selection">
+              <div class="capacity-summary">
+                <div class="capacity-label">
+                  <span id="knapsack-weight-summary">Weight 0 / 0</span>
+                  <strong id="knapsack-vector-summary">z = ()</strong>
+                </div>
+                <div class="capacity-track" aria-hidden="true">
+                  <span id="knapsack-capacity-fill"></span>
+                </div>
+              </div>
+              <div class="knapsack-items" id="knapsack-items"></div>
+              <p class="knapsack-status" id="knapsack-status" aria-live="polite"></p>
+            </div>
+            <div class="demo-legend" id="decision-legend" aria-label="Decision space legend">
               <span><i class="legend-swatch feasible"></i>Feasible region \(Z\)</span>
               <span><i class="legend-dot selected"></i>Selected \(z\)</span>
               <span><i class="legend-dot vertex"></i>Editable boundary vertex</span>
@@ -241,7 +255,7 @@
               <span id="true-risk-value">0.00</span>
             </div>
             <div class="risk-bars" id="risk-bars" aria-label="Risk estimates for all candidate decisions"></div>
-            <p class="risk-explainer">
+            <p class="risk-explainer" id="risk-explainer">
               Educational 2D approximation; not a reproduction of the paper's full guarantees.
             </p>
           </article>
@@ -249,7 +263,7 @@
       </div>
 
       <p class="demo-note">
-        Simplified 2D linear/quadratic demo. Conformal-style balls are visual intuition, not full theoretical reproduction.
+        Simplified educational demo. Conformal-style balls and finite-decision margins are visual intuition, not full theoretical reproduction.
       </p>
     </section>
 
