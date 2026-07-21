@@ -203,20 +203,7 @@
               <h3 id="decision-heading">Decision space</h3>
               <p id="decision-subtitle">Drag \(z\) or the boundary vertices.</p>
             </div>
-            <canvas id="decision-canvas" width="420" height="420" aria-label="Editable feasible region and selected candidate decision"></canvas>
-            <div class="knapsack-panel" id="knapsack-panel" hidden aria-label="Binary knapsack item selection">
-              <div class="capacity-summary">
-                <div class="capacity-label">
-                  <span id="knapsack-weight-summary">Weight 0 / 0</span>
-                  <strong id="knapsack-vector-summary">z = ()</strong>
-                </div>
-                <div class="capacity-track" aria-hidden="true">
-                  <span id="knapsack-capacity-fill"></span>
-                </div>
-              </div>
-              <div class="knapsack-items" id="knapsack-items"></div>
-              <p class="knapsack-status" id="knapsack-status" aria-live="polite"></p>
-            </div>
+            <canvas id="decision-canvas" width="420" height="420" aria-label="Decision space for feasible regions and selected candidate decision"></canvas>
             <div class="demo-legend" id="decision-legend" aria-label="Decision space legend">
               <span><i class="legend-swatch feasible"></i>Feasible region \(Z\)</span>
               <span><i class="legend-dot selected"></i>Selected \(z\)</span>
