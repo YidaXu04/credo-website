@@ -173,7 +173,18 @@
               <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
             </div>
           </div>
-          <p class="objective-note" id="demo-objective-note">Objective: \(f(z;y)=y^\top z\).</p>
+          <section class="objective-note formulation-block" id="demo-objective-note" aria-labelledby="demo-formulation-heading">
+            <h3 id="demo-formulation-heading">Optimization problem</h3>
+            <div class="formulation-body" id="demo-formulation-body">
+              \[
+              \begin{aligned}
+              \underset{z}{\operatorname{minimize}}\quad & y^\top z\\
+              \text{subject to}\quad & z \in Z = \operatorname{conv}\{v_1, v_2, v_3\}
+              \end{aligned}
+              \]
+              Editable boundary vertices define the feasible polytope \(Z\); here \(m=3\).
+            </div>
+          </section>
           <details class="q-controls" id="demo-q-controls" hidden>
             <summary>
               <span>Customize \(Q\)</span>
