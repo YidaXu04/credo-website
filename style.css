@@ -627,6 +627,11 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.formulation-block {
+  display: grid;
+  gap: 4px;
+}
+
 .objective-note h3 {
   margin: 0 0 4px;
   color: var(--accent-dark);

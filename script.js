@@ -62,7 +62,6 @@ document.addEventListener("DOMContentLoaded", () => {
     epsilon: document.getElementById("demo-epsilon"),
     epsilonValue: document.getElementById("demo-epsilon-value"),
     mode: document.getElementById("demo-mode"),
-    objectiveNote: document.getElementById("demo-objective-note"),
     formulationBody: document.getElementById("demo-formulation-body"),
     qControls: document.getElementById("demo-q-controls"),
     qSettingLabel: document.getElementById("demo-q-setting-label"),
