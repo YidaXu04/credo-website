@@ -30,7 +30,7 @@ This repository is ready to deploy as a static site from the repository root usi
 
 ## Demo Scope
 
-The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations plus two small finite knapsack cases.
+The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations plus two small finite knapsack cases. The demo displays a compact, complete optimization formulation for every supported problem class, including the objective, decision variable domain, and constraints.
 
 Knapsack (2D–2D) uses the 2D binary decision variable `z = (z1, z2)`, a linear objective `y^T z`, and one linear capacity constraint. Both the decision space and outcome space are visualized in 2D, and the feasible 2D binary points are solved exactly by enumeration.
 

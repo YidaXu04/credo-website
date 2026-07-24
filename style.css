@@ -612,14 +612,47 @@ h3 {
 }
 
 .objective-note {
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   max-width: 100%;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border: 1px solid rgba(40, 92, 77, 0.18);
+  border-left: 3px solid var(--gold);
+  border-radius: 7px;
+  background: rgba(238, 243, 239, 0.68);
   color: var(--muted);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 0.75rem;
-  font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.objective-note h3 {
+  margin: 0 0 4px;
+  color: var(--accent-dark);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.formulation-body {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+}
+
+.formulation-body mjx-container[jax="CHTML"][display="true"] {
+  margin: 0.18em 0 0.28em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--ink);
+  font-size: 0.94em;
+}
+
+.formulation-body mjx-container[jax="CHTML"]:not([display="true"]) {
+  color: var(--ink);
 }
 
 .q-controls {

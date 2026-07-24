@@ -63,6 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
     epsilonValue: document.getElementById("demo-epsilon-value"),
     mode: document.getElementById("demo-mode"),
     objectiveNote: document.getElementById("demo-objective-note"),
+    formulationBody: document.getElementById("demo-formulation-body"),
     qControls: document.getElementById("demo-q-controls"),
     qSettingLabel: document.getElementById("demo-q-setting-label"),
     q11: document.getElementById("demo-q11"),
@@ -148,8 +149,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentDecisionView = null;
   let currentOutcomeView = null;
   let openTooltipTrigger = null;
-  let renderedProblemClass = "";
-  let renderedQKey = "";
+  let renderedFormulationKey = "";
   let rawQInput = makePaperQ();
   let activeQ = makePaperQ();
   let qpCandidateCache = {
@@ -645,27 +645,99 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateProblemClassMath(problemClass, q) {
     const qKey = makeQKey(q);
-    if (renderedProblemClass === problemClass && renderedQKey === qKey) {
+    const vertexCount = boundaryVertices.length;
+    const formulationKey = [
+      problemClass,
+      problemClass === problemClasses.quadratic ? qKey : "",
+      problemClass === problemClasses.linear || problemClass === problemClasses.quadratic ? vertexCount : ""
+    ].join("::");
+    if (renderedFormulationKey === formulationKey) {
       return;
     }
-    renderedProblemClass = problemClass;
-    renderedQKey = qKey;
+    renderedFormulationKey = formulationKey;
 
+    controls.formulationBody.textContent = buildOptimizationFormulation(problemClass, q, vertexCount);
+    outcomeSubtitle.textContent = getOutcomeSubtitle(problemClass);
+
+    typesetDynamicMath([controls.formulationBody, outcomeSubtitle]);
+  }
+
+  function buildOptimizationFormulation(problemClass, q, vertexCount) {
     if (problemClass === problemClasses.quadratic) {
-      controls.objectiveNote.textContent = `Objective: \\(f(z;y)=\\frac{1}{2}z^\\top Qz+y^\\top z\\), \\(Q=\\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}\\). Inverse region and inner-ball distance are numerically approximated.`;
-      outcomeSubtitle.textContent = "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
-    } else if (problemClass === problemClasses.binaryKnapsack) {
-      controls.objectiveNote.textContent = "Knapsack (2D–2D): maximize \\(V(z;y)=y^\\top z\\), subject to \\(2z_1+3z_2\\leq 3\\), \\(z\\in\\{0,1\\}^2\\). Feasible 2D binary decisions are enumerated exactly.";
-      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 2D binary decision.";
-    } else if (problemClass === problemClasses.binaryKnapsack4d) {
-      controls.objectiveNote.textContent = "Knapsack (4D–2D): choose \\(z\\in\\{0,1\\}^4\\), weights \\(w=(2,3,4,5)\\), capacity \\(C=6\\). Item values are affine functions of \\(y\\in\\mathbb{R}^2\\), and feasible 4D decisions are enumerated exactly by bitmask.";
-      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 4D binary decision.";
-    } else {
-      controls.objectiveNote.textContent = "Objective: \\(f(z;y)=y^\\top z\\).";
-      outcomeSubtitle.textContent = "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+      return [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz + y^\\top z\\\\",
+        `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}\\\\`,
+        `\\text{with}\\quad & Q = \\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}`,
+        "\\end{aligned}",
+        "\\]",
+        `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). Inverse region and inner-ball distance are numerically approximated.`
+      ].join("\n");
     }
 
-    typesetDynamicMath([controls.objectiveNote, outcomeSubtitle]);
+    if (problemClass === problemClasses.binaryKnapsack) {
+      return [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z\\in\\{0,1\\}^2}{\\operatorname{maximize}}\\quad & y^\\top z\\\\",
+        `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsackWeights, knapsackCapacity)}\\\\`,
+        "& y\\in\\mathbb{R}^2",
+        "\\end{aligned}",
+        "\\]",
+        "Feasible 2D binary decisions are enumerated exactly."
+      ].join("\n");
+    }
+
+    if (problemClass === problemClasses.binaryKnapsack4d) {
+      const itemFunctions = knapsack4dItemValues
+        .map((_, index) => `\\(${makeKnapsack4dItemFormula(index, ["y_1", "y_2"], true)}\\)`)
+        .join("; ");
+      return [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z\\in\\{0,1\\}^4}{\\operatorname{maximize}}\\quad & \\sum_{i=1}^{4} z_i v_i(y)\\\\",
+        `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsack4dWeights, knapsack4dCapacity)}\\\\`,
+        "& y\\in\\mathbb{R}^2",
+        "\\end{aligned}",
+        "\\]",
+        `Item values: ${itemFunctions}. Feasible 4D decisions are enumerated exactly by bitmask.`
+      ].join("\n");
+    }
+
+    return [
+      "\\[",
+      "\\begin{aligned}",
+      "\\underset{z}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
+      `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}`,
+      "\\end{aligned}",
+      "\\]",
+      `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\).`
+    ].join("\n");
+  }
+
+  function getOutcomeSubtitle(problemClass) {
+    if (problemClass === problemClasses.quadratic) {
+      return "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    }
+    if (problemClass === problemClasses.binaryKnapsack) {
+      return "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 2D binary decision.";
+    }
+    if (problemClass === problemClasses.binaryKnapsack4d) {
+      return "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 4D binary decision.";
+    }
+    return "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+  }
+
+  function formatVertexConvexHull(vertexCount) {
+    const vertices = vertexCount <= 4
+      ? Array.from({ length: vertexCount }, (_, index) => `v_${index + 1}`).join(", ")
+      : `v_1, \\ldots, v_{${vertexCount}}`;
+    return `\\operatorname{conv}\\{${vertices}\\}`;
+  }
+
+  function formatKnapsackCapacityConstraint(weights, capacity) {
+    return `${weights.map((weight, index) => `${weight}z_${index + 1}`).join(" + ")}\\leq ${capacity}`;
   }
 
   function typesetDynamicMath(elements) {
@@ -1780,11 +1852,12 @@ document.addEventListener("DOMContentLoaded", () => {
     scheduleRender();
   }
 
-  function makeKnapsack4dItemFormula(index) {
+  function makeKnapsack4dItemFormula(index, variables = ["y1", "y2"], useLatexSubscript = false) {
     const itemValue = knapsack4dItemValues[index];
-    const y1 = formatSignedTerm(itemValue.coeff[0], "y1", true);
-    const y2 = formatSignedTerm(itemValue.coeff[1], "y2", true);
-    return `v${index + 1}(y) = ${formatKnapsack4dBase(itemValue.base)} ${y1} ${y2}`;
+    const y1 = formatSignedTerm(itemValue.coeff[0], variables[0], true);
+    const y2 = formatSignedTerm(itemValue.coeff[1], variables[1], true);
+    const itemName = useLatexSubscript ? `v_${index + 1}` : `v${index + 1}`;
+    return `${itemName}(y) = ${formatKnapsack4dBase(itemValue.base)} ${y1} ${y2}`;
   }
 
   function formatKnapsack4dBase(value) {
