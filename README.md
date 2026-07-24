@@ -10,7 +10,7 @@ Wenbin Zhou, Agni Orfanoudaki, Shixiang Zhu
 
 - `index.html` contains the project page content and section structure.
 - `style.css` contains all styling and responsive layout rules.
-- `script.js` contains the dependency-free interactive 2D linear, quadratic, and binary knapsack demo logic and tab state management.
+- `script.js` contains the dependency-free interactive 2D linear, quadratic, and Knapsack (2D–2D) demo logic and tab state management.
 - `Conformalized Decision Risk Assessment.pdf` is linked from the Paper button when present in the project root.
 
 ## Local Preview
@@ -30,6 +30,6 @@ This repository is ready to deploy as a static site from the repository root usi
 
 ## Demo Scope
 
-The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations plus a small 2D binary knapsack case. The knapsack example uses the binary decision variable `z = (z1, z2)`, a linear objective `y^T z`, and one linear capacity constraint. Both the decision space and outcome space are visualized in 2D, and the feasible binary points are solved exactly by enumeration.
+The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations plus a small Knapsack (2D–2D) case. The Knapsack (2D–2D) example uses the 2D binary decision variable `z = (z1, z2)`, a linear objective `y^T z`, and one linear capacity constraint. Both the decision space and outcome space are visualized in 2D, and the feasible 2D binary points are solved exactly by enumeration.
 
-The quadratic demo defaults to the paper's stylized QP matrix `Q = 0.1I`, with an optional control for exploring other symmetric positive-definite 2x2 matrices. Tabs preserve independent demo states for comparison, including the selected problem class and selected binary decision. The knapsack example is educational, not a general MILP solver: arbitrary integer constraints, mixed continuous/integer variables, branch-and-bound, 3D views, real-world data, and model training remain future work and are not implemented in this static prototype. The browser visualization does not reproduce Algorithm 2 or the paper's theoretical guarantees.
+The quadratic demo defaults to the paper's stylized QP matrix `Q = 0.1I`, with an optional control for exploring other symmetric positive-definite 2x2 matrices. Tabs preserve independent demo states for comparison, including the selected problem class and selected 2D binary decision. The Knapsack (2D–2D) example is educational, not a general MILP solver: arbitrary integer constraints, mixed continuous/integer variables, branch-and-bound, 3D views, real-world data, and model training remain future work and are not implemented in this static prototype. The browser visualization does not reproduce Algorithm 2 or the paper's theoretical guarantees.

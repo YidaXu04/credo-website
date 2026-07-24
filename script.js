@@ -592,7 +592,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateOutputs(settings) {
     controls.zValue.textContent = settings.problemClass === problemClasses.binaryKnapsack
-      ? `Selected binary decision: z = ${formatBinaryVector(settings.z)}`
+      ? `Selected 2D binary decision: z = ${formatBinaryVector(settings.z)}`
       : `Current z: ${formatPoint(settings.z)}`;
     controls.vertexCountValue.value = String(boundaryVertices.length);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
@@ -616,8 +616,8 @@ document.addEventListener("DOMContentLoaded", () => {
       controls.objectiveNote.textContent = `Objective: \\(f(z;y)=\\frac{1}{2}z^\\top Qz+y^\\top z\\), \\(Q=\\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}\\). Inverse region and inner-ball distance are numerically approximated.`;
       outcomeSubtitle.textContent = "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
     } else if (problemClass === problemClasses.binaryKnapsack) {
-      controls.objectiveNote.textContent = "Objective: maximize \\(V(z;y)=y^\\top z\\), subject to \\(2z_1+3z_2\\leq 3\\), \\(z\\in\\{0,1\\}^2\\). Feasible binary decisions are enumerated exactly.";
-      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected binary decision.";
+      controls.objectiveNote.textContent = "Knapsack (2D–2D): maximize \\(V(z;y)=y^\\top z\\), subject to \\(2z_1+3z_2\\leq 3\\), \\(z\\in\\{0,1\\}^2\\). Feasible 2D binary decisions are enumerated exactly.";
+      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 2D binary decision.";
     } else {
       controls.objectiveNote.textContent = "Objective: \\(f(z;y)=y^\\top z\\).";
       outcomeSubtitle.textContent = "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
@@ -718,11 +718,11 @@ document.addEventListener("DOMContentLoaded", () => {
     decisionCanvas.classList.toggle("is-binary-mode", isKnapsack);
     decisionHeading.textContent = "Decision space";
     decisionSubtitle.textContent = isKnapsack
-      ? "\\(z\\) must be a feasible binary point."
+      ? "\\(z\\) is a 2D binary decision and must be feasible."
       : "Drag \\(z\\) or the boundary vertices.";
     updateDecisionLegend(isKnapsack);
     riskExplainer.textContent = isKnapsack
-      ? "The knapsack optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite-decision boundary margin."
+      ? "The Knapsack (2D–2D) optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite 2D-decision boundary margin."
       : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
     typesetDynamicMath([decisionSubtitle, riskExplainer, decisionLegend]);
   }
@@ -731,9 +731,9 @@ document.addEventListener("DOMContentLoaded", () => {
     decisionLegend.replaceChildren();
     if (isKnapsack) {
       decisionLegend.append(
-        makeLegendItem("legend-dot selected", "Selected z"),
-        makeLegendItem("legend-dot binary-feasible", "Feasible binary decision"),
-        makeLegendItem("legend-dot binary-infeasible", "Infeasible binary decision")
+        makeLegendItem("legend-dot selected", "Selected \\(z\\)"),
+        makeLegendItem("legend-dot binary-feasible", "Feasible 2D binary decision"),
+        makeLegendItem("legend-dot binary-infeasible", "Infeasible 2D binary decision")
       );
       return;
     }
@@ -838,14 +838,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
     if (!sample) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "Hover or click a generated sample to inspect its finite-decision margin."
+        ? "Hover or click a generated sample to inspect its finite 2D-decision margin."
         : "Hover or click a generated sample to inspect its conformal-style inner ball.";
       return;
     }
 
     if (!isNearOptimal(settings.z, sample, settings.epsilon, settings)) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "This sample is outside the selected binary decision's inverse near-optimal region, so no positive finite-decision margin is certified."
+        ? "This sample is outside the selected 2D binary decision's inverse near-optimal region, so no positive finite 2D-decision margin is certified."
         : "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
       return;
     }
@@ -857,13 +857,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (radius <= 1e-4) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "This sample is on or too close to a competing-decision boundary, so the finite-decision margin is effectively zero."
+        ? "This sample is on or too close to a competing 2D-decision boundary, so the finite 2D-decision margin is effectively zero."
         : "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
       return;
     }
 
     outcomeRadiusNote.textContent = isKnapsack
-      ? `Finite-decision distance to the nearest competing-decision boundary: ${radius.toFixed(3)}.`
+      ? `Finite 2D-decision distance to the nearest competing 2D-decision boundary: ${radius.toFixed(3)}.`
       : `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
@@ -1514,7 +1514,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
 
     riskBars.append(makeRiskRow({
-      label: isKnapsack ? `selected binary decision ${formatBinaryVector(settings.z)}` : `selected ${formatPoint(settings.z)}`,
+      label: isKnapsack ? `selected 2D binary decision ${formatBinaryVector(settings.z)}` : `selected ${formatPoint(settings.z)}`,
       risk: selectedRisk,
       selected: true
     }));
@@ -1527,16 +1527,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const summary = document.createElement("div");
     summary.className = "risk-boundary-summary";
     summary.textContent = isKnapsack
-      ? `Feasible binary decisions (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`
+      ? `Feasible 2D binary decisions (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`
       : `Boundary vertices (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
     riskBars.append(summary);
 
     if (comparisonRisks.length > 1) {
       const bestLabel = isKnapsack
-        ? `best feasible decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.min.index].z)}`
+        ? `best feasible 2D decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.min.index].z)}`
         : `best boundary v${boundarySummary.min.index + 1}`;
       const worstLabel = isKnapsack
-        ? `worst feasible decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.max.index].z)}`
+        ? `worst feasible 2D decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.max.index].z)}`
         : `worst boundary v${boundarySummary.max.index + 1}`;
       riskBars.append(makeRiskRow({
         label: bestLabel,
