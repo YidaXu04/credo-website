@@ -15,7 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const problemClasses = {
     linear: "linear",
     quadratic: "quadratic",
-    binaryKnapsack: "binary-knapsack"
+    binaryKnapsack: "binary-knapsack",
+    binaryKnapsack4d: "binary-knapsack-4d"
   };
   const defaultKnapsackSelection = [1, 0];
   const knapsackCapacity = 3;
@@ -25,6 +26,15 @@ document.addEventListener("DOMContentLoaded", () => {
     [1, 0],
     [0, 1],
     [1, 1]
+  ];
+  const defaultKnapsack4dSelection = [1, 1, 0, 0];
+  const knapsack4dCapacity = 6;
+  const knapsack4dWeights = [2, 3, 4, 5];
+  const knapsack4dItemValues = [
+    { base: 0.14, coeff: [1, 0.15] },
+    { base: 0.06, coeff: [0.35, 0.95] },
+    { base: 0.2, coeff: [0.78, -0.25] },
+    { base: -0.03, coeff: [-0.2, 1.12] }
   ];
   const paperQuadraticMatrix = {
     q11: 0.1,
@@ -66,6 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const demoTabs = document.getElementById("demo-tabs");
   const tabAdd = document.getElementById("demo-tab-add");
   const decisionCanvas = document.getElementById("decision-canvas");
+  const knapsack4dDecisionUi = document.getElementById("knapsack-4d-decision-ui");
   const decisionHeading = document.getElementById("decision-heading");
   const decisionSubtitle = document.getElementById("decision-subtitle");
   const decisionLegend = document.getElementById("decision-legend");
@@ -83,6 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
     || !demoTabs
     || !tabAdd
     || !decisionCanvas
+    || !knapsack4dDecisionUi
     || !decisionHeading
     || !decisionSubtitle
     || !decisionLegend
@@ -126,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let boundaryVertices = [];
   let selectedZ = [0, 0];
   let selectedKnapsackZ = defaultKnapsackSelection.slice();
+  let selectedKnapsack4dZ = defaultKnapsack4dSelection.slice();
   let generatedSampleSeed = 24591;
   let generatedSamplePairs = [];
   let scheduled = false;
@@ -266,6 +279,9 @@ document.addEventListener("DOMContentLoaded", () => {
       selectKnapsackDecisionFromEvent(event);
       return;
     }
+    if (controls.problemClass.value === problemClasses.binaryKnapsack4d) {
+      return;
+    }
     if (!currentDecisionView) {
       return;
     }
@@ -279,6 +295,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
       selectKnapsackDecisionFromEvent(event);
     }
+  });
+
+  knapsack4dDecisionUi.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-knapsack-4d-index]");
+    if (!button) {
+      return;
+    }
+    const itemIndex = Number.parseInt(button.dataset.knapsack4dIndex, 10);
+    if (!Number.isInteger(itemIndex)) {
+      return;
+    }
+    toggleKnapsack4dItem(itemIndex);
   });
 
   decisionCanvas.addEventListener("pointermove", (event) => {
@@ -380,6 +408,7 @@ document.addEventListener("DOMContentLoaded", () => {
       label,
       selectedZ: vertices[0].slice(),
       selectedKnapsackZ: defaultKnapsackSelection.slice(),
+      selectedKnapsack4dZ: defaultKnapsack4dSelection.slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
       problemClass: problemClasses.linear,
       rawQ: makePaperQ(),
@@ -403,6 +432,7 @@ document.addEventListener("DOMContentLoaded", () => {
       label,
       selectedZ: source.selectedZ.slice(),
       selectedKnapsackZ: (source.selectedKnapsackZ || defaultKnapsackSelection).slice(),
+      selectedKnapsack4dZ: (source.selectedKnapsack4dZ || defaultKnapsack4dSelection).slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
       problemClass: source.problemClass || problemClasses.linear,
       rawQ: makePaperQ(),
@@ -430,6 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     tab.selectedZ = selectedZ.slice();
     tab.selectedKnapsackZ = selectedKnapsackZ.slice();
+    tab.selectedKnapsack4dZ = selectedKnapsack4dZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
     tab.problemClass = settings ? settings.problemClass : controls.problemClass.value;
     tab.rawQ = settings ? { ...settings.rawQ } : readRawQ();
@@ -449,6 +480,10 @@ document.addEventListener("DOMContentLoaded", () => {
     invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
     selectedKnapsackZ = normalizeKnapsackSelection(tab.selectedKnapsackZ || defaultKnapsackSelection);
+    selectedKnapsack4dZ = normalizeKnapsackSelection(
+      tab.selectedKnapsack4dZ || defaultKnapsack4dSelection,
+      problemClasses.binaryKnapsack4d
+    );
     generatedSampleSeed = tab.generatedSampleSeed;
     generatedSamplePairs = tab.generatedSamplePairs.map((pair) => pair.slice());
     controls.problemClass.value = tab.problemClass || problemClasses.linear;
@@ -542,7 +577,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const samples = generateSamples(generatedSamplePairs, settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
-    const comparisonRisks = settings.problemClass === problemClasses.binaryKnapsack
+    const comparisonRisks = isKnapsackProblem(settings.problemClass)
       ? settings.knapsackDecisions.map((decision) => estimateRisk(decision.z, samples, residuals, settings))
       : boundaryVertices.map((vertex) => estimateRisk(vertex, samples, residuals, settings));
     const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
@@ -557,6 +592,8 @@ document.addEventListener("DOMContentLoaded", () => {
     updateOutputs(settings);
     if (settings.problemClass === problemClasses.binaryKnapsack) {
       drawKnapsackDecisionSpace(decisionCanvas, settings.z);
+    } else if (settings.problemClass === problemClasses.binaryKnapsack4d) {
+      drawKnapsack4dDecisionUi(settings);
     } else {
       drawDecisionSpace(decisionCanvas, settings.z);
     }
@@ -568,14 +605,16 @@ document.addEventListener("DOMContentLoaded", () => {
   function readSettings() {
     const problemClass = controls.problemClass.value;
     if (problemClass === problemClasses.binaryKnapsack) {
-      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ);
+      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClass);
+    } else if (problemClass === problemClasses.binaryKnapsack4d) {
+      selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClass);
     } else {
       selectedZ = projectToFeasibleRegion(selectedZ);
     }
     const q = readActiveQ();
-    const knapsackDecisions = problemClass === problemClasses.binaryKnapsack ? getKnapsackDecisionCache().decisions : [];
+    const knapsackDecisions = isKnapsackProblem(problemClass) ? getKnapsackDecisionCache(problemClass).decisions : [];
     return {
-      z: problemClass === problemClasses.binaryKnapsack ? selectedKnapsackZ.slice() : selectedZ.slice(),
+      z: getCurrentDecision(problemClass),
       feasibleVertices: getFeasibleVertices(),
       problemClass,
       rawQ: readRawQ(),
@@ -591,8 +630,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateOutputs(settings) {
-    controls.zValue.textContent = settings.problemClass === problemClasses.binaryKnapsack
-      ? `Selected 2D binary decision: z = ${formatBinaryVector(settings.z)}`
+    controls.zValue.textContent = isKnapsackProblem(settings.problemClass)
+      ? `Selected ${getKnapsackConfig(settings.problemClass).dimension}D binary decision: z = ${formatBinaryVector(settings.z)}`
       : `Current z: ${formatPoint(settings.z)}`;
     controls.vertexCountValue.value = String(boundaryVertices.length);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
@@ -618,6 +657,9 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (problemClass === problemClasses.binaryKnapsack) {
       controls.objectiveNote.textContent = "Knapsack (2D–2D): maximize \\(V(z;y)=y^\\top z\\), subject to \\(2z_1+3z_2\\leq 3\\), \\(z\\in\\{0,1\\}^2\\). Feasible 2D binary decisions are enumerated exactly.";
       outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 2D binary decision.";
+    } else if (problemClass === problemClasses.binaryKnapsack4d) {
+      controls.objectiveNote.textContent = "Knapsack (4D–2D): choose \\(z\\in\\{0,1\\}^4\\), weights \\(w=(2,3,4,5)\\), capacity \\(C=6\\). Item values are affine functions of \\(y\\in\\mathbb{R}^2\\), and feasible 4D decisions are enumerated exactly by bitmask.";
+      outcomeSubtitle.textContent = "Samples vs. the exact inverse \\(\\epsilon\\)-near-optimal region for the selected 4D binary decision.";
     } else {
       controls.objectiveNote.textContent = "Objective: \\(f(z;y)=y^\\top z\\).";
       outcomeSubtitle.textContent = "Samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
@@ -711,29 +753,46 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateModeVisibility(settings) {
-    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
+    const is2dKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
+    const is4dKnapsack = settings.problemClass === problemClasses.binaryKnapsack4d;
+    const isKnapsack = isKnapsackProblem(settings.problemClass);
     controls.vertexControl.hidden = isKnapsack;
     controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic;
     decisionCanvas.classList.toggle("is-dragging", !isKnapsack && decisionCanvas.classList.contains("is-dragging"));
-    decisionCanvas.classList.toggle("is-binary-mode", isKnapsack);
+    decisionCanvas.classList.toggle("is-binary-mode", is2dKnapsack);
+    decisionCanvas.hidden = is4dKnapsack;
+    knapsack4dDecisionUi.hidden = !is4dKnapsack;
     decisionHeading.textContent = "Decision space";
-    decisionSubtitle.textContent = isKnapsack
+    decisionSubtitle.textContent = is2dKnapsack
       ? "\\(z\\) is a 2D binary decision and must be feasible."
+      : is4dKnapsack
+        ? "\\(z\\) is a 4D binary decision; infeasible item combinations are disabled."
       : "Drag \\(z\\) or the boundary vertices.";
-    updateDecisionLegend(isKnapsack);
-    riskExplainer.textContent = isKnapsack
+    updateDecisionLegend(settings.problemClass);
+    riskExplainer.textContent = is2dKnapsack
       ? "The Knapsack (2D–2D) optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite 2D-decision boundary margin."
+      : is4dKnapsack
+        ? "The Knapsack (4D–2D) optimum is computed exactly over feasible 4D bitmasks; p-value and e-value modes use finite-decision margins in the 2D outcome space."
       : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
     typesetDynamicMath([decisionSubtitle, riskExplainer, decisionLegend]);
   }
 
-  function updateDecisionLegend(isKnapsack) {
+  function updateDecisionLegend(problemClass) {
     decisionLegend.replaceChildren();
-    if (isKnapsack) {
+    if (problemClass === problemClasses.binaryKnapsack) {
       decisionLegend.append(
         makeLegendItem("legend-dot selected", "Selected \\(z\\)"),
         makeLegendItem("legend-dot binary-feasible", "Feasible 2D binary decision"),
         makeLegendItem("legend-dot binary-infeasible", "Infeasible 2D binary decision")
+      );
+      return;
+    }
+
+    if (problemClass === problemClasses.binaryKnapsack4d) {
+      decisionLegend.append(
+        makeLegendItem("legend-dot selected", "Selected item"),
+        makeLegendItem("legend-dot binary-feasible", "Available feasible toggle"),
+        makeLegendItem("legend-dot binary-infeasible", "Disabled infeasible toggle")
       );
       return;
     }
@@ -835,17 +894,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     outcomeRadiusNote.hidden = false;
     const sample = samples[getActiveSampleIndex()];
-    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
+    const isKnapsack = isKnapsackProblem(settings.problemClass);
+    const dimensionLabel = isKnapsack ? `${getKnapsackConfig(settings.problemClass).dimension}D` : "";
     if (!sample) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "Hover or click a generated sample to inspect its finite 2D-decision margin."
+        ? `Hover or click a generated sample to inspect its finite ${dimensionLabel}-decision margin.`
         : "Hover or click a generated sample to inspect its conformal-style inner ball.";
       return;
     }
 
     if (!isNearOptimal(settings.z, sample, settings.epsilon, settings)) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "This sample is outside the selected 2D binary decision's inverse near-optimal region, so no positive finite 2D-decision margin is certified."
+        ? `This sample is outside the selected ${dimensionLabel} binary decision's inverse near-optimal region, so no positive finite-decision margin is certified.`
         : "This sample is outside the inverse feasible region, so no positive inner ball is certified.";
       return;
     }
@@ -857,13 +917,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (radius <= 1e-4) {
       outcomeRadiusNote.textContent = isKnapsack
-        ? "This sample is on or too close to a competing 2D-decision boundary, so the finite 2D-decision margin is effectively zero."
+        ? `This sample is on or too close to a competing ${dimensionLabel}-decision boundary, so the finite-decision margin is effectively zero.`
         : "This sample is on or too close to the boundary, so the certified inner-ball radius is effectively zero.";
       return;
     }
 
     outcomeRadiusNote.textContent = isKnapsack
-      ? `Finite 2D-decision distance to the nearest competing 2D-decision boundary: ${radius.toFixed(3)}.`
+      ? `Finite-decision distance to the nearest competing ${dimensionLabel}-decision boundary: ${radius.toFixed(3)}.`
       : `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
@@ -925,8 +985,23 @@ document.addEventListener("DOMContentLoaded", () => {
     return objective(y, z);
   }
 
-  function knapsackWeight(z) {
-    return z.reduce((sum, selected, index) => sum + selected * knapsackWeights[index], 0);
+  function finiteKnapsackValue(z, y, settings) {
+    const config = getKnapsackConfig(settings.problemClass);
+    if (!config.itemValues) {
+      return knapsackValue(z, y);
+    }
+    return z.reduce((sum, selected, index) => {
+      if (selected !== 1) {
+        return sum;
+      }
+      const itemValue = config.itemValues[index];
+      return sum + itemValue.base + itemValue.coeff[0] * y[0] + itemValue.coeff[1] * y[1];
+    }, 0);
+  }
+
+  function knapsackWeight(z, problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    return z.reduce((sum, selected, index) => sum + selected * config.weights[index], 0);
   }
 
   function quadraticTerm(z, q) {
@@ -945,7 +1020,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (Array.isArray(settingsOrVertices)) {
       return isNearOptimalLinear(z, y, epsilon, settingsOrVertices);
     }
-    if (settingsOrVertices.problemClass === problemClasses.binaryKnapsack) {
+    if (isKnapsackProblem(settingsOrVertices.problemClass)) {
       return isNearOptimalKnapsack(z, y, epsilon, settingsOrVertices);
     }
     if (settingsOrVertices.problemClass === problemClasses.quadratic) {
@@ -973,15 +1048,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function isNearOptimalKnapsack(z, y, epsilon, settings) {
-    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache().decisions;
-    if (decisions.length === 0 || !isFeasibleKnapsackDecision(z)) {
+    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache(settings.problemClass).decisions;
+    if (decisions.length === 0 || !isFeasibleKnapsackDecision(z, settings.problemClass)) {
       return false;
     }
 
     // Knapsack is a maximization example. Keep this sign convention explicit
     // rather than reusing the continuous minimization helper.
-    const selectedValue = knapsackValue(z, y);
-    const bestValue = Math.max(...decisions.map((decision) => knapsackValue(decision.z, y)));
+    const selectedValue = finiteKnapsackValue(z, y, settings);
+    const bestValue = Math.max(...decisions.map((decision) => finiteKnapsackValue(decision.z, y, settings)));
     return selectedValue >= bestValue - epsilon - 1e-10;
   }
 
@@ -1014,7 +1089,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function distanceToBoundary(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
-    if (!Array.isArray(settingsOrVertices) && settingsOrVertices.problemClass === problemClasses.binaryKnapsack) {
+    if (!Array.isArray(settingsOrVertices) && isKnapsackProblem(settingsOrVertices.problemClass)) {
       return knapsackDistanceToBoundary(z, y, epsilon, settingsOrVertices);
     }
     if (!Array.isArray(settingsOrVertices) && settingsOrVertices.problemClass === problemClasses.quadratic) {
@@ -1038,9 +1113,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function knapsackHalfspaceMargins(z, y, epsilon, settings) {
-    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache().decisions;
+    const decisions = settings.knapsackDecisions.length > 0 ? settings.knapsackDecisions : getKnapsackDecisionCache(settings.problemClass).decisions;
     return decisions
-      .map((decision) => makeKnapsackComparison(z, decision.z))
+      .map((decision) => makeKnapsackComparison(z, decision.z, settings.problemClass))
       .filter((comparison) => comparison.norm >= 1e-10)
       .map((comparison) => {
         const signedMargin = comparison.coeff[0] * y[0] + comparison.coeff[1] * y[1] + comparison.base + epsilon;
@@ -1048,14 +1123,33 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  function makeKnapsackComparison(z, competitorZ) {
-    const coeff = [
-      z[0] - competitorZ[0],
-      z[1] - competitorZ[1]
-    ];
+  function makeKnapsackComparison(z, competitorZ, problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    const difference = z.map((value, index) => value - competitorZ[index]);
+    if (!config.itemValues) {
+      const coeff = [
+        difference[0],
+        difference[1]
+      ];
+      return {
+        coeff,
+        base: 0,
+        norm: Math.hypot(coeff[0], coeff[1])
+      };
+    }
+
+    const coeff = difference.reduce((sum, multiplier, index) => {
+      return [
+        sum[0] + multiplier * config.itemValues[index].coeff[0],
+        sum[1] + multiplier * config.itemValues[index].coeff[1]
+      ];
+    }, [0, 0]);
+    const base = difference.reduce((sum, multiplier, index) => {
+      return sum + multiplier * config.itemValues[index].base;
+    }, 0);
     return {
       coeff,
-      base: 0,
+      base,
       norm: Math.hypot(coeff[0], coeff[1])
     };
   }
@@ -1268,6 +1362,54 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillText(`z = ${formatBinaryVector(z)}`, Math.min(zx + 12, plot.right - 76), Math.max(zy + 24, plot.top + 16));
   }
 
+  function drawKnapsack4dDecisionUi(settings) {
+    currentDecisionView = null;
+    const config = getKnapsackConfig(settings.problemClass);
+    const selectedWeight = knapsackWeight(settings.z, settings.problemClass);
+    const title = document.createElement("div");
+    title.className = "knapsack4d-summary";
+
+    const vector = document.createElement("strong");
+    vector.textContent = `z=${formatBinaryVector(settings.z)}`;
+    const weight = document.createElement("span");
+    weight.textContent = `weight ${selectedWeight}/${config.capacity}`;
+    title.append(vector, weight);
+
+    const itemGrid = document.createElement("div");
+    itemGrid.className = "knapsack4d-items";
+    config.weights.forEach((itemWeight, index) => {
+      const itemSelected = settings.z[index] === 1;
+      const candidate = settings.z.slice();
+      candidate[index] = itemSelected ? 0 : 1;
+      const feasibleToggle = isFeasibleKnapsackDecision(candidate, settings.problemClass);
+      const button = document.createElement("button");
+      button.className = `knapsack4d-item${itemSelected ? " is-selected" : ""}`;
+      button.type = "button";
+      button.dataset.knapsack4dIndex = String(index);
+      button.disabled = !itemSelected && !feasibleToggle;
+      button.setAttribute("aria-pressed", itemSelected ? "true" : "false");
+      button.title = makeKnapsack4dItemFormula(index);
+
+      const name = document.createElement("span");
+      name.className = "knapsack4d-item-name";
+      name.textContent = `Item ${index + 1}`;
+      const state = document.createElement("span");
+      state.className = "knapsack4d-item-state";
+      state.textContent = itemSelected ? "z=1" : "z=0";
+      const weightLabel = document.createElement("span");
+      weightLabel.className = "knapsack4d-item-weight";
+      weightLabel.textContent = `w=${itemWeight}`;
+      button.append(name, state, weightLabel);
+      itemGrid.append(button);
+    });
+
+    const status = document.createElement("p");
+    status.className = "knapsack4d-status";
+    status.textContent = `Exact bitmask enumeration: ${settings.knapsackDecisions.length} feasible decisions. Values are affine in y=(y1,y2).`;
+
+    knapsack4dDecisionUi.replaceChildren(title, itemGrid, status);
+  }
+
   function drawOutcomeSpace(canvas, settings, samples) {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
@@ -1287,7 +1429,7 @@ document.addEventListener("DOMContentLoaded", () => {
     drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings);
     shadeInverseRegion(ctx, plot, xMin, xMax, yMin, yMax, settings);
     drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "y₁", "y₂");
-    if (settings.problemClass === problemClasses.linear || settings.problemClass === problemClasses.binaryKnapsack) {
+    if (settings.problemClass === problemClasses.linear || isKnapsackProblem(settings.problemClass)) {
       drawHalfspaceBoundaries(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, settings);
     }
 
@@ -1445,9 +1587,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = demoColors.inverseBoundary;
 
-    if (settings.problemClass === problemClasses.binaryKnapsack) {
+    if (isKnapsackProblem(settings.problemClass)) {
       settings.knapsackDecisions.forEach((decision) => {
-        const comparison = makeKnapsackComparison(settings.z, decision.z);
+        const comparison = makeKnapsackComparison(settings.z, decision.z, settings.problemClass);
         if (comparison.norm < 1e-10) {
           return;
         }
@@ -1511,10 +1653,11 @@ document.addEventListener("DOMContentLoaded", () => {
     riskValue.textContent = selectedRisk.toFixed(2);
     trueRiskValue.textContent = approximateTrueRisk.toFixed(2);
     riskBars.replaceChildren();
-    const isKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
+    const isKnapsack = isKnapsackProblem(settings.problemClass);
+    const knapsackConfig = isKnapsack ? getKnapsackConfig(settings.problemClass) : null;
 
     riskBars.append(makeRiskRow({
-      label: isKnapsack ? `selected 2D binary decision ${formatBinaryVector(settings.z)}` : `selected ${formatPoint(settings.z)}`,
+      label: isKnapsack ? `selected z=${formatBinaryVector(settings.z)}` : `selected ${formatPoint(settings.z)}`,
       risk: selectedRisk,
       selected: true
     }));
@@ -1527,16 +1670,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const summary = document.createElement("div");
     summary.className = "risk-boundary-summary";
     summary.textContent = isKnapsack
-      ? `Feasible 2D binary decisions (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`
+      ? `Feasible ${knapsackConfig.dimension}D decisions (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`
       : `Boundary vertices (${comparisonRisks.length}): min ${boundarySummary.min.risk.toFixed(2)} · avg ${boundarySummary.average.toFixed(2)} · max ${boundarySummary.max.risk.toFixed(2)}`;
     riskBars.append(summary);
 
     if (comparisonRisks.length > 1) {
       const bestLabel = isKnapsack
-        ? `best feasible 2D decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.min.index].z)}`
+        ? `best feasible z=${formatBinaryVector(settings.knapsackDecisions[boundarySummary.min.index].z)}`
         : `best boundary v${boundarySummary.min.index + 1}`;
       const worstLabel = isKnapsack
-        ? `worst feasible 2D decision ${formatBinaryVector(settings.knapsackDecisions[boundarySummary.max.index].z)}`
+        ? `worst feasible z=${formatBinaryVector(settings.knapsackDecisions[boundarySummary.max.index].z)}`
         : `worst boundary v${boundarySummary.max.index + 1}`;
       riskBars.append(makeRiskRow({
         label: bestLabel,
@@ -1591,36 +1734,129 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function normalizeKnapsackSelection(selection) {
-    const normalized = knapsackWeights.map((_, index) => selection[index] === 1 ? 1 : 0);
-    if (isFeasibleKnapsackDecision(normalized)) {
-      return normalized;
-    }
-    return defaultKnapsackSelection.slice();
+  function isKnapsackProblem(problemClass) {
+    return problemClass === problemClasses.binaryKnapsack
+      || problemClass === problemClasses.binaryKnapsack4d;
   }
 
-  function getKnapsackDecisionCache() {
-    const key = `${knapsackCapacity}::${knapsackWeights.join(",")}`;
+  function getKnapsackConfig(problemClass = problemClasses.binaryKnapsack) {
+    if (problemClass === problemClasses.binaryKnapsack4d) {
+      return {
+        dimension: 4,
+        weights: knapsack4dWeights,
+        capacity: knapsack4dCapacity,
+        defaultSelection: defaultKnapsack4dSelection,
+        itemValues: knapsack4dItemValues
+      };
+    }
+
+    return {
+      dimension: 2,
+      weights: knapsackWeights,
+      capacity: knapsackCapacity,
+      defaultSelection: defaultKnapsackSelection,
+      itemValues: null
+    };
+  }
+
+  function getCurrentDecision(problemClass) {
+    if (problemClass === problemClasses.binaryKnapsack) {
+      return selectedKnapsackZ.slice();
+    }
+    if (problemClass === problemClasses.binaryKnapsack4d) {
+      return selectedKnapsack4dZ.slice();
+    }
+    return selectedZ.slice();
+  }
+
+  function toggleKnapsack4dItem(itemIndex) {
+    const candidate = selectedKnapsack4dZ.slice();
+    candidate[itemIndex] = candidate[itemIndex] === 1 ? 0 : 1;
+    if (!isFeasibleKnapsackDecision(candidate, problemClasses.binaryKnapsack4d)) {
+      return;
+    }
+    selectedKnapsack4dZ = candidate;
+    clearSampleSelection();
+    scheduleRender();
+  }
+
+  function makeKnapsack4dItemFormula(index) {
+    const itemValue = knapsack4dItemValues[index];
+    const y1 = formatSignedTerm(itemValue.coeff[0], "y1", true);
+    const y2 = formatSignedTerm(itemValue.coeff[1], "y2", true);
+    return `v${index + 1}(y) = ${formatKnapsack4dBase(itemValue.base)} ${y1} ${y2}`;
+  }
+
+  function formatKnapsack4dBase(value) {
+    return value.toFixed(2);
+  }
+
+  function formatSignedTerm(value, variable, alwaysSign) {
+    if (Math.abs(value) < 1e-9) {
+      return alwaysSign ? "+ 0" : "0";
+    }
+    const sign = value < 0 ? "-" : "+";
+    const magnitude = Math.abs(value);
+    const coefficient = approximatelyEqual(magnitude, 1) ? "" : formatKnapsack4dCoefficient(magnitude);
+    return alwaysSign || value < 0
+      ? `${sign} ${coefficient}${variable}`
+      : `${coefficient}${variable}`;
+  }
+
+  function formatKnapsack4dCoefficient(value) {
+    return value.toFixed(2);
+  }
+
+  function normalizeKnapsackSelection(selection, problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    const normalized = config.weights.map((_, index) => selection[index] === 1 ? 1 : 0);
+    if (isFeasibleKnapsackDecision(normalized, problemClass)) {
+      return normalized;
+    }
+    return config.defaultSelection.slice();
+  }
+
+  function getKnapsackDecisionCache(problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    const key = `${problemClass}::${config.capacity}::${config.weights.join(",")}`;
     if (knapsackDecisionCache.key === key) {
       return knapsackDecisionCache;
     }
     knapsackDecisionCache = {
       key,
-      decisions: enumerateFeasibleKnapsackDecisions()
+      decisions: enumerateFeasibleKnapsackDecisions(problemClass)
     };
     return knapsackDecisionCache;
   }
 
-  function enumerateFeasibleKnapsackDecisions() {
-    return knapsackBinaryPoints
-      .filter(isFeasibleKnapsackDecision)
-      .map((z) => ({ z: z.slice(), weight: knapsackWeight(z) }));
+  function enumerateFeasibleKnapsackDecisions(problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    const candidates = problemClass === problemClasses.binaryKnapsack
+      ? knapsackBinaryPoints.map((point) => point.slice())
+      : enumerateBinaryDecisionsByBitmask(config.weights.length);
+    return candidates
+      .filter((z) => isFeasibleKnapsackDecision(z, problemClass))
+      .map((z) => ({ z: z.slice(), weight: knapsackWeight(z, problemClass) }));
   }
 
-  function isFeasibleKnapsackDecision(z) {
-    return z.length === knapsackWeights.length
+  function enumerateBinaryDecisionsByBitmask(dimension) {
+    const decisions = [];
+    const count = 2 ** dimension;
+    for (let mask = 0; mask < count; mask += 1) {
+      const z = [];
+      for (let index = 0; index < dimension; index += 1) {
+        z.push((mask >> index) & 1);
+      }
+      decisions.push(z);
+    }
+    return decisions;
+  }
+
+  function isFeasibleKnapsackDecision(z, problemClass = problemClasses.binaryKnapsack) {
+    const config = getKnapsackConfig(problemClass);
+    return z.length === config.weights.length
       && z.every((value) => value === 0 || value === 1)
-      && knapsackWeight(z) <= knapsackCapacity;
+      && knapsackWeight(z, problemClass) <= config.capacity;
   }
 
   function selectKnapsackDecisionFromEvent(event) {
@@ -1699,7 +1935,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleProblemClassChange() {
     clearSampleSelection();
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
-      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ);
+      selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClasses.binaryKnapsack);
+    } else if (controls.problemClass.value === problemClasses.binaryKnapsack4d) {
+      selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClasses.binaryKnapsack4d);
     }
     scheduleRender();
   }

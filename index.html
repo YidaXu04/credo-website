@@ -61,7 +61,7 @@
         <p class="eyebrow">Interactive 2D CREDO Demo</p>
         <h2>Audit a candidate decision in an editable 2D optimization problem</h2>
         <p class="lead">
-          Compare saved tabs for simplified fixed-context linear, quadratic, and Knapsack (2D–2D) demos.
+          Compare saved tabs for simplified fixed-context linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demos.
         </p>
       </div>
 
@@ -79,13 +79,14 @@
                 <label for="demo-problem-class">Problem class</label>
                 <span class="control-tooltip">
                   <button class="tooltip-trigger" type="button" aria-label="About problem class" aria-describedby="tip-problem-class" aria-expanded="false">?</button>
-                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between the original linear objective, a simplified convex quadratic objective, and the finite Knapsack (2D–2D) example with two binary decision variables and two outcome dimensions.</span>
+                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between the original linear objective, a simplified convex quadratic objective, and finite knapsack examples with 2D or 4D binary decisions over a 2D outcome space.</span>
                 </span>
               </div>
               <select id="demo-problem-class" name="problem-class" aria-describedby="tip-problem-class">
                 <option value="linear">Linear program</option>
                 <option value="quadratic">Quadratic program</option>
                 <option value="binary-knapsack">Knapsack (2D–2D)</option>
+                <option value="binary-knapsack-4d">Knapsack (4D–2D)</option>
               </select>
             </div>
 
@@ -204,6 +205,7 @@
               <p id="decision-subtitle">Drag \(z\) or the boundary vertices.</p>
             </div>
             <canvas id="decision-canvas" width="420" height="420" aria-label="Decision space for feasible regions and selected candidate decision"></canvas>
+            <div class="knapsack4d-ui" id="knapsack-4d-decision-ui" hidden role="group" aria-label="Finite 4D binary knapsack decision controls"></div>
             <div class="demo-legend" id="decision-legend" aria-label="Decision space legend">
               <span><i class="legend-swatch feasible"></i>Feasible region \(Z\)</span>
               <span><i class="legend-dot selected"></i>Selected \(z\)</span>
@@ -250,7 +252,7 @@
       </div>
 
       <p class="demo-note">
-        Simplified educational demo. Conformal-style balls and finite 2D-decision margins are visual intuition, not full theoretical reproduction.
+        Simplified educational demo. Conformal-style balls and finite-decision margins are visual intuition, not full theoretical reproduction.
       </p>
     </section>
 
