@@ -301,7 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!button) {
       return;
     }
-    const itemIndex = Number.parseInt(button.dataset.knapsack4dIndex, 10);
+    const itemIndex = Number.parseInt(button.getAttribute("data-knapsack-4d-index"), 10);
     if (!Number.isInteger(itemIndex)) {
       return;
     }
@@ -1450,14 +1450,12 @@ document.addEventListener("DOMContentLoaded", () => {
     itemGrid.className = "knapsack4d-items";
     config.weights.forEach((itemWeight, index) => {
       const itemSelected = settings.z[index] === 1;
-      const candidate = settings.z.slice();
-      candidate[index] = itemSelected ? 0 : 1;
-      const feasibleToggle = isFeasibleKnapsackDecision(candidate, settings.problemClass);
+      const wouldExceedCapacity = !itemSelected && selectedWeight + itemWeight > config.capacity;
       const button = document.createElement("button");
       button.className = `knapsack4d-item${itemSelected ? " is-selected" : ""}`;
       button.type = "button";
-      button.dataset.knapsack4dIndex = String(index);
-      button.disabled = !itemSelected && !feasibleToggle;
+      button.setAttribute("data-knapsack-4d-index", String(index));
+      button.disabled = wouldExceedCapacity;
       button.setAttribute("aria-pressed", itemSelected ? "true" : "false");
       button.title = makeKnapsack4dItemFormula(index);
 
