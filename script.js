@@ -822,12 +822,15 @@ document.addEventListener("DOMContentLoaded", () => {
       `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}`,
       "\\end{aligned}",
       "\\]",
-      `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\).`
+      `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). The inverse geometry is shown with exact halfspace-style boundaries in this simplified LP demo.`
     ].join("\n");
   }
 
   function getOutcomeSubtitle(problemClass, activeVisualizationMode = visualizationModes.twoD) {
     if (activeVisualizationMode === visualizationModes.threeD) {
+      if (problemClass === problemClasses.quadratic) {
+        return "Educational 3D outcome samples vs. three stacked numerical \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
+      }
       return "Educational 3D outcome samples vs. three stacked \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
     }
     if (problemClass === problemClasses.quadratic) {
@@ -958,7 +961,7 @@ document.addEventListener("DOMContentLoaded", () => {
       : is4dKnapsack
         ? "The Knapsack (4D–2D) optimum is computed exactly over feasible 4D bitmasks; p-value and e-value modes use finite-decision margins in the 2D outcome space."
       : settings.visualizationMode === visualizationModes.threeD
-        ? "Educational 3D visualization prototype for the linear program; risk estimates still use the simplified static-demo estimator and do not reproduce the paper's full computational method."
+        ? make3dRiskExplainer(settings.problemClass)
         : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
     const modeVisibilityKey = `${settings.problemClass}::${settings.visualizationMode}`;
     if (renderedModeVisibilityKey !== modeVisibilityKey) {
@@ -994,12 +997,20 @@ document.addEventListener("DOMContentLoaded", () => {
         : "Outcome samples and inverse feasible region"
     );
     controls.visualizationNote.textContent = supports3d
-      ? "2D is the default. 3D is an educational linear-program prototype."
-      : "3D is currently available only for the linear-program demo.";
+      ? "2D is the default. 3D is an educational Linear/Quadratic prototype."
+      : "3D is available for Linear and Quadratic demos; Knapsack demos remain 2D-only.";
+  }
+
+  function make3dRiskExplainer(problemClass) {
+    if (problemClass === problemClasses.quadratic) {
+      return "Educational 3D visualization prototype for the quadratic program; inverse cross-sections use the same numerical candidate approximation as the 2D QP demo and do not reproduce Algorithm 2 or the paper's full guarantees.";
+    }
+
+    return "Educational 3D visualization prototype for the linear program; inverse geometry uses the simplified demo's exact halfspace-style LP boundaries, while risk estimates still use the static-demo estimator and do not reproduce Algorithm 2 or the paper's full guarantees.";
   }
 
   function supports3dVisualization(problemClass) {
-    return problemClass === problemClasses.linear;
+    return problemClass === problemClasses.linear || problemClass === problemClasses.quadratic;
   }
 
   function normalizeVisualizationMode(mode, problemClass) {
@@ -1713,7 +1724,9 @@ document.addEventListener("DOMContentLoaded", () => {
     clearCanvas(ctx, width, height);
     draw3dBox(ctx, projector, extent, zExtent);
     draw3dInverseCrossSections(ctx, projector, extent, zExtent, settings);
-    draw3dHalfspaceBoundaries(ctx, projector, extent, zExtent, settings);
+    if (settings.problemClass === problemClasses.linear) {
+      draw3dHalfspaceBoundaries(ctx, projector, extent, zExtent, settings);
+    }
     draw3dAxes(ctx, projector, extent, zExtent);
     draw3dSamples(ctx, projector, samples, settings);
     draw3dInteractionHint(ctx, plot);
@@ -1845,15 +1858,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function get3dInverseCrossSectionCells(settings, xyExtent, zExtent) {
     const gridSize = 18;
-    const key = [
-      settings.problemClass,
-      settings.epsilon.toFixed(4),
-      settings.z.map((value) => value.toFixed(4)).join(","),
-      settings.feasibleVertices.map((vertex) => vertex.map((value) => value.toFixed(4)).join(",")).join("|"),
-      xyExtent.toFixed(4),
-      zExtent.toFixed(4),
-      gridSize
-    ].join("::");
+    const key = make3dInverseCrossSectionKey(settings, xyExtent, zExtent, gridSize);
 
     if (inverse3dCellCache.key === key) {
       return inverse3dCellCache.cells;
@@ -1888,6 +1893,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     inverse3dCellCache = { key, cells };
     return cells;
+  }
+
+  function make3dInverseCrossSectionKey(settings, xyExtent, zExtent, gridSize) {
+    return [
+      settings.problemClass,
+      settings.epsilon.toFixed(5),
+      settings.z.map((value) => value.toFixed(5)).join(","),
+      settings.feasibleVertices.map((vertex) => vertex.map((value) => value.toFixed(5)).join(",")).join("|"),
+      settings.problemClass === problemClasses.quadratic ? makeQKey(settings.q) : "",
+      settings.problemClass === problemClasses.quadratic ? qpInteriorGridSize : "",
+      settings.samplePattern,
+      settings.sigma.toFixed(5),
+      settings.k,
+      xyExtent.toFixed(5),
+      zExtent.toFixed(5),
+      gridSize
+    ].join("::");
   }
 
   function draw3dHalfspaceBoundaries(ctx, projector, xyExtent, zExtent, settings) {
@@ -2557,9 +2579,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getQpCandidateCache(q) {
-    const key = `${makeQKey(q)}::${boundaryVertices
-      .map((vertex) => `${vertex[0].toFixed(5)},${vertex[1].toFixed(5)}`)
-      .join("|")}`;
+    const key = [
+      makeQKey(q),
+      qpInteriorGridSize,
+      boundaryVertices
+        .map((vertex) => `${vertex[0].toFixed(5)},${vertex[1].toFixed(5)}`)
+        .join("|")
+    ].join("::");
     if (qpCandidateCache.key === key) {
       return qpCandidateCache;
     }
