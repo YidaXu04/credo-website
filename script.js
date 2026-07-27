@@ -18,6 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
     binaryKnapsack: "binary-knapsack",
     binaryKnapsack4d: "binary-knapsack-4d"
   };
+  const visualizationModes = {
+    twoD: "2d",
+    threeD: "3d"
+  };
+  const default3dView = {
+    yaw: -0.64,
+    pitch: 0.52
+  };
   const defaultKnapsackSelection = [1, 0];
   const knapsackCapacity = 3;
   const knapsackWeights = [2, 3];
@@ -70,7 +78,10 @@ document.addEventListener("DOMContentLoaded", () => {
     q22: document.getElementById("demo-q22"),
     qReset: document.getElementById("demo-q-reset"),
     qStatus: document.getElementById("demo-q-status"),
-    vertexControl: document.getElementById("demo-vertex-control")
+    vertexControl: document.getElementById("demo-vertex-control"),
+    visualization2d: document.getElementById("demo-visualization-2d"),
+    visualization3d: document.getElementById("demo-visualization-3d"),
+    visualizationNote: document.getElementById("demo-visualization-note")
   };
 
   const demoTabs = document.getElementById("demo-tabs");
@@ -145,10 +156,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let dragTarget = null;
   let hoverSampleIndex = null;
   let pinnedSampleIndex = null;
+  let visualizationMode = visualizationModes.twoD;
+  let view3d = { ...default3dView };
+  let rotate3dDrag = null;
   let currentDecisionView = null;
   let currentOutcomeView = null;
   let openTooltipTrigger = null;
   let renderedFormulationKey = "";
+  let renderedModeVisibilityKey = "";
   let rawQInput = makePaperQ();
   let activeQ = makePaperQ();
   let qpCandidateCache = {
@@ -158,6 +173,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let knapsackDecisionCache = {
     key: "",
     decisions: []
+  };
+  let inverse3dCellCache = {
+    key: "",
+    cells: []
   };
 
   tooltipTriggers.forEach((trigger) => {
@@ -272,6 +291,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   controls.mode.addEventListener("input", handleModeChange);
   controls.mode.addEventListener("change", handleModeChange);
+  [controls.visualization2d, controls.visualization3d].forEach((control) => {
+    control.addEventListener("change", handleVisualizationModeChange);
+  });
 
   decisionCanvas.addEventListener("pointerdown", (event) => {
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
@@ -327,7 +349,37 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  outcomeCanvas.tabIndex = -1;
+
+  outcomeCanvas.addEventListener("pointerdown", (event) => {
+    if (!is3dModeActive()) {
+      return;
+    }
+    rotate3dDrag = {
+      x: event.clientX,
+      y: event.clientY,
+      yaw: view3d.yaw,
+      pitch: view3d.pitch
+    };
+    outcomeCanvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
   outcomeCanvas.addEventListener("pointermove", (event) => {
+    if (rotate3dDrag) {
+      const dx = event.clientX - rotate3dDrag.x;
+      const dy = event.clientY - rotate3dDrag.y;
+      view3d = {
+        yaw: rotate3dDrag.yaw + dx * 0.012,
+        pitch: clamp(rotate3dDrag.pitch + dy * 0.01, -1.12, 1.12)
+      };
+      scheduleRender();
+      event.preventDefault();
+      return;
+    }
+    if (is3dModeActive()) {
+      return;
+    }
     if (!isConformalRadiusMode(controls.mode.value)) {
       return;
     }
@@ -339,18 +391,60 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   outcomeCanvas.addEventListener("pointerleave", () => {
+    if (is3dModeActive()) {
+      return;
+    }
     if (hoverSampleIndex !== null) {
       hoverSampleIndex = null;
       scheduleRender();
     }
   });
 
+  ["pointerup", "pointercancel"].forEach((eventName) => {
+    outcomeCanvas.addEventListener(eventName, (event) => {
+      if (!rotate3dDrag) {
+        return;
+      }
+      rotate3dDrag = null;
+      if (outcomeCanvas.hasPointerCapture(event.pointerId)) {
+        outcomeCanvas.releasePointerCapture(event.pointerId);
+      }
+    });
+  });
+
   outcomeCanvas.addEventListener("click", (event) => {
+    if (is3dModeActive()) {
+      return;
+    }
     if (!isConformalRadiusMode(controls.mode.value)) {
       return;
     }
     const nearest = findNearestSampleIndex(event);
     pinnedSampleIndex = nearest === null ? null : nearest;
+    scheduleRender();
+  });
+
+  outcomeCanvas.addEventListener("keydown", (event) => {
+    if (!is3dModeActive()) {
+      return;
+    }
+
+    const rotationStep = event.shiftKey ? 0.18 : 0.08;
+    if (event.key === "ArrowLeft") {
+      view3d = { ...view3d, yaw: view3d.yaw - rotationStep };
+    } else if (event.key === "ArrowRight") {
+      view3d = { ...view3d, yaw: view3d.yaw + rotationStep };
+    } else if (event.key === "ArrowUp") {
+      view3d = { ...view3d, pitch: clamp(view3d.pitch - rotationStep, -1.12, 1.12) };
+    } else if (event.key === "ArrowDown") {
+      view3d = { ...view3d, pitch: clamp(view3d.pitch + rotationStep, -1.12, 1.12) };
+    } else if (event.key === "Home") {
+      view3d = { ...default3dView };
+    } else {
+      return;
+    }
+
+    event.preventDefault();
     scheduleRender();
   });
 
@@ -418,6 +512,8 @@ document.addEventListener("DOMContentLoaded", () => {
       k: 60,
       epsilon: 0.08,
       mode: "monte-carlo",
+      visualizationMode: visualizationModes.twoD,
+      view3d: { ...default3dView },
       generatedSampleSeed: seed,
       generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
     };
@@ -442,6 +538,8 @@ document.addEventListener("DOMContentLoaded", () => {
       k: source.k,
       epsilon: source.epsilon,
       mode: source.mode,
+      visualizationMode: source.visualizationMode || visualizationModes.twoD,
+      view3d: { ...(source.view3d || default3dView) },
       generatedSampleSeed: seed,
       generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
     };
@@ -470,6 +568,8 @@ document.addEventListener("DOMContentLoaded", () => {
     tab.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
     tab.epsilon = settings ? settings.epsilon : Number.parseFloat(controls.epsilon.value);
     tab.mode = settings ? settings.mode : controls.mode.value;
+    tab.visualizationMode = settings ? settings.visualizationMode : getSelectedVisualizationMode();
+    tab.view3d = { ...view3d };
     tab.generatedSampleSeed = generatedSampleSeed;
     tab.generatedSamplePairs = generatedSamplePairs.map((pair) => pair.slice());
   }
@@ -498,6 +598,9 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.k.value = String(tab.k);
     controls.epsilon.value = String(tab.epsilon);
     controls.mode.value = tab.mode;
+    visualizationMode = normalizeVisualizationMode(tab.visualizationMode || visualizationModes.twoD, controls.problemClass.value);
+    view3d = { ...(tab.view3d || default3dView) };
+    syncVisualizationInputs();
     clearSampleSelection();
   }
 
@@ -596,7 +699,11 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       drawDecisionSpace(decisionCanvas, settings.z);
     }
-    drawOutcomeSpace(outcomeCanvas, settings, samples);
+    if (settings.visualizationMode === visualizationModes.threeD) {
+      drawOutcomeSpace3d(outcomeCanvas, settings, samples);
+    } else {
+      drawOutcomeSpace(outcomeCanvas, settings, samples);
+    }
     updateOutcomeNote(settings, samples);
     updateRiskPanel(settings, selectedRisk, approximateTrueRisk, comparisonRisks);
   }
@@ -624,7 +731,9 @@ document.addEventListener("DOMContentLoaded", () => {
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
       epsilon: Number.parseFloat(controls.epsilon.value),
-      mode: controls.mode.value
+      mode: controls.mode.value,
+      visualizationMode: normalizeVisualizationMode(visualizationMode, problemClass),
+      view3d: { ...view3d }
     };
   }
 
@@ -638,15 +747,17 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
     updateQPanelVisibility(settings.problemClass);
     updateQStatus(settings.q);
-    updateProblemClassMath(settings.problemClass, settings.q);
+    updateProblemClassMath(settings.problemClass, settings.q, settings.visualizationMode);
+    updateVisualizationAvailability(settings);
     updateModeVisibility(settings);
   }
 
-  function updateProblemClassMath(problemClass, q) {
+  function updateProblemClassMath(problemClass, q, activeVisualizationMode) {
     const qKey = makeQKey(q);
     const vertexCount = boundaryVertices.length;
     const formulationKey = [
       problemClass,
+      activeVisualizationMode,
       problemClass === problemClasses.quadratic ? qKey : "",
       problemClass === problemClasses.linear || problemClass === problemClasses.quadratic ? vertexCount : ""
     ].join("::");
@@ -656,7 +767,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderedFormulationKey = formulationKey;
 
     controls.formulationBody.textContent = buildOptimizationFormulation(problemClass, q, vertexCount);
-    outcomeSubtitle.textContent = getOutcomeSubtitle(problemClass);
+    outcomeSubtitle.textContent = getOutcomeSubtitle(problemClass, activeVisualizationMode);
 
     typesetDynamicMath([controls.formulationBody, outcomeSubtitle]);
   }
@@ -715,7 +826,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ].join("\n");
   }
 
-  function getOutcomeSubtitle(problemClass) {
+  function getOutcomeSubtitle(problemClass, activeVisualizationMode = visualizationModes.twoD) {
+    if (activeVisualizationMode === visualizationModes.threeD) {
+      return "Educational 3D outcome samples vs. three stacked \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
+    }
     if (problemClass === problemClasses.quadratic) {
       return "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
     }
@@ -834,18 +948,74 @@ document.addEventListener("DOMContentLoaded", () => {
     decisionCanvas.hidden = is4dKnapsack;
     knapsack4dDecisionUi.hidden = !is4dKnapsack;
     decisionHeading.textContent = "Decision space";
-    decisionSubtitle.textContent = is2dKnapsack
+    const decisionSubtitleText = is2dKnapsack
       ? "\\(z\\) is a 2D binary decision and must be feasible."
       : is4dKnapsack
         ? "\\(z\\) is a 4D binary decision; infeasible item combinations are disabled."
       : "Drag \\(z\\) or the boundary vertices.";
-    updateDecisionLegend(settings.problemClass);
-    riskExplainer.textContent = is2dKnapsack
+    const riskExplainerText = is2dKnapsack
       ? "The Knapsack (2D–2D) optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite 2D-decision boundary margin."
       : is4dKnapsack
         ? "The Knapsack (4D–2D) optimum is computed exactly over feasible 4D bitmasks; p-value and e-value modes use finite-decision margins in the 2D outcome space."
-      : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
-    typesetDynamicMath([decisionSubtitle, riskExplainer, decisionLegend]);
+      : settings.visualizationMode === visualizationModes.threeD
+        ? "Educational 3D visualization prototype for the linear program; risk estimates still use the simplified static-demo estimator and do not reproduce the paper's full computational method."
+        : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
+    const modeVisibilityKey = `${settings.problemClass}::${settings.visualizationMode}`;
+    if (renderedModeVisibilityKey !== modeVisibilityKey) {
+      renderedModeVisibilityKey = modeVisibilityKey;
+      decisionSubtitle.textContent = decisionSubtitleText;
+      riskExplainer.textContent = riskExplainerText;
+      updateDecisionLegend(settings.problemClass);
+      typesetDynamicMath([decisionSubtitle, riskExplainer, decisionLegend]);
+    }
+  }
+
+  function updateVisualizationAvailability(settings) {
+    const supports3d = supports3dVisualization(settings.problemClass);
+    if (!supports3d && visualizationMode === visualizationModes.threeD) {
+      visualizationMode = visualizationModes.twoD;
+      settings.visualizationMode = visualizationModes.twoD;
+      clearSampleSelection();
+    }
+
+    controls.visualization3d.disabled = !supports3d;
+    syncVisualizationInputs();
+    const active3d = settings.visualizationMode === visualizationModes.threeD;
+    root.dataset.visualizationMode = settings.visualizationMode;
+    outcomeCanvas.classList.toggle("is-3d-mode", active3d);
+    outcomeCanvas.tabIndex = active3d ? 0 : -1;
+    if (!active3d && document.activeElement === outcomeCanvas) {
+      outcomeCanvas.blur();
+    }
+    outcomeCanvas.setAttribute(
+      "aria-label",
+      active3d
+        ? "Educational 3D outcome samples and inverse near-optimal cross-sections. Drag to rotate, or focus and use arrow keys."
+        : "Outcome samples and inverse feasible region"
+    );
+    controls.visualizationNote.textContent = supports3d
+      ? "2D is the default. 3D is an educational linear-program prototype."
+      : "3D is currently available only for the linear-program demo.";
+  }
+
+  function supports3dVisualization(problemClass) {
+    return problemClass === problemClasses.linear;
+  }
+
+  function normalizeVisualizationMode(mode, problemClass) {
+    if (mode === visualizationModes.threeD && supports3dVisualization(problemClass)) {
+      return visualizationModes.threeD;
+    }
+    return visualizationModes.twoD;
+  }
+
+  function getSelectedVisualizationMode() {
+    return controls.visualization3d.checked ? visualizationModes.threeD : visualizationModes.twoD;
+  }
+
+  function syncVisualizationInputs() {
+    controls.visualization2d.checked = visualizationMode !== visualizationModes.threeD;
+    controls.visualization3d.checked = visualizationMode === visualizationModes.threeD;
   }
 
   function updateDecisionLegend(problemClass) {
@@ -955,6 +1125,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateOutcomeNote(settings, samples) {
     if (!outcomeRadiusNote) {
+      return;
+    }
+
+    if (settings.visualizationMode === visualizationModes.threeD) {
+      outcomeRadiusNote.hidden = true;
       return;
     }
 
@@ -1523,6 +1698,276 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function drawOutcomeSpace3d(canvas, settings, samples) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const sigmaScale = getSamplePatternSigmaScale(settings.samplePattern);
+    const extent = Math.max(1.15, settings.sigma * sigmaScale * 2.2 + 0.55);
+    const zExtent = extent * 0.82;
+    const plot = makeSquarePlot(width, height, { left: 34, right: 28, top: 22, bottom: 32 });
+    const projector = makeProjector3d(plot, extent, zExtent, settings.view3d);
+
+    currentOutcomeView = null;
+
+    clearCanvas(ctx, width, height);
+    draw3dBox(ctx, projector, extent, zExtent);
+    draw3dInverseCrossSections(ctx, projector, extent, zExtent, settings);
+    draw3dHalfspaceBoundaries(ctx, projector, extent, zExtent, settings);
+    draw3dAxes(ctx, projector, extent, zExtent);
+    draw3dSamples(ctx, projector, samples, settings);
+    draw3dInteractionHint(ctx, plot);
+  }
+
+  function makeProjector3d(plot, xyExtent, zExtent, view) {
+    const centerX = (plot.left + plot.right) / 2;
+    const centerY = (plot.top + plot.bottom) / 2 + 8;
+    const scale = Math.min(plot.right - plot.left, plot.bottom - plot.top) / (2.8 * xyExtent);
+    const yaw = view.yaw;
+    const pitch = view.pitch;
+    const cosYaw = Math.cos(yaw);
+    const sinYaw = Math.sin(yaw);
+    const cosPitch = Math.cos(pitch);
+    const sinPitch = Math.sin(pitch);
+    const zScale = xyExtent / Math.max(zExtent, 1e-9);
+
+    return ([x, y, z]) => {
+      const scaledZ = z * zScale;
+      const rotatedX = x * cosYaw - scaledZ * sinYaw;
+      const yawDepth = x * sinYaw + scaledZ * cosYaw;
+      const rotatedY = y * cosPitch - yawDepth * sinPitch;
+      const depth = y * sinPitch + yawDepth * cosPitch;
+      return [
+        centerX + rotatedX * scale,
+        centerY - rotatedY * scale,
+        depth
+      ];
+    };
+  }
+
+  function draw3dBox(ctx, projector, xyExtent, zExtent) {
+    const xMin = -xyExtent;
+    const xMax = xyExtent;
+    const yMin = -xyExtent;
+    const yMax = xyExtent;
+    const zMin = -zExtent;
+    const zMax = zExtent;
+    const corners = [
+      [xMin, yMin, zMin],
+      [xMax, yMin, zMin],
+      [xMax, yMax, zMin],
+      [xMin, yMax, zMin],
+      [xMin, yMin, zMax],
+      [xMax, yMin, zMax],
+      [xMax, yMax, zMax],
+      [xMin, yMax, zMax]
+    ].map((point) => projector(point));
+    const edges = [
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      [0, 4], [1, 5], [2, 6], [3, 7]
+    ];
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(93, 107, 100, 0.18)";
+    ctx.lineWidth = 1;
+    edges.forEach(([a, b]) => {
+      ctx.beginPath();
+      ctx.moveTo(corners[a][0], corners[a][1]);
+      ctx.lineTo(corners[b][0], corners[b][1]);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function draw3dAxes(ctx, projector, xyExtent, zExtent) {
+    const axes = [
+      { end: [xyExtent, 0, 0], label: "y1", color: "rgba(23, 33, 28, 0.78)" },
+      { end: [0, xyExtent, 0], label: "y2", color: "rgba(40, 92, 77, 0.82)" },
+      { end: [0, 0, zExtent], label: "y3", color: "rgba(178, 106, 44, 0.86)" }
+    ];
+    const origin = projector([0, 0, 0]);
+
+    ctx.save();
+    ctx.font = "700 13px Arial, Helvetica, sans-serif";
+    axes.forEach((axis) => {
+      const end = projector(axis.end);
+      ctx.strokeStyle = axis.color;
+      ctx.fillStyle = axis.color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(origin[0], origin[1]);
+      ctx.lineTo(end[0], end[1]);
+      ctx.stroke();
+      draw3dArrowHead(ctx, origin, end);
+      ctx.fillText(axis.label, end[0] + 5, end[1] - 5);
+    });
+    ctx.restore();
+  }
+
+  function draw3dArrowHead(ctx, start, end) {
+    const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
+    const size = 6;
+    ctx.beginPath();
+    ctx.moveTo(end[0], end[1]);
+    ctx.lineTo(end[0] - size * Math.cos(angle - 0.55), end[1] - size * Math.sin(angle - 0.55));
+    ctx.lineTo(end[0] - size * Math.cos(angle + 0.55), end[1] - size * Math.sin(angle + 0.55));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function draw3dInverseCrossSections(ctx, projector, xyExtent, zExtent, settings) {
+    const cells = get3dInverseCrossSectionCells(settings, xyExtent, zExtent)
+      .map((cell) => {
+        const points = cell.corners.map((point) => projector(point));
+        return {
+          points,
+          depth: points.reduce((sum, point) => sum + point[2], 0) / points.length
+        };
+      });
+
+    ctx.save();
+    cells
+      .sort((a, b) => a.depth - b.depth)
+      .forEach((cell) => {
+        ctx.beginPath();
+        ctx.moveTo(cell.points[0][0], cell.points[0][1]);
+        cell.points.slice(1).forEach((point) => ctx.lineTo(point[0], point[1]));
+        ctx.closePath();
+        ctx.fillStyle = "rgba(178, 106, 44, 0.045)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(178, 106, 44, 0.13)";
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      });
+    ctx.restore();
+  }
+
+  function get3dInverseCrossSectionCells(settings, xyExtent, zExtent) {
+    const gridSize = 18;
+    const key = [
+      settings.problemClass,
+      settings.epsilon.toFixed(4),
+      settings.z.map((value) => value.toFixed(4)).join(","),
+      settings.feasibleVertices.map((vertex) => vertex.map((value) => value.toFixed(4)).join(",")).join("|"),
+      xyExtent.toFixed(4),
+      zExtent.toFixed(4),
+      gridSize
+    ].join("::");
+
+    if (inverse3dCellCache.key === key) {
+      return inverse3dCellCache.cells;
+    }
+
+    const cells = [];
+    const zSlices = [-zExtent, 0, zExtent];
+    const xMin = -xyExtent;
+    const yMin = -xyExtent;
+    const step = (xyExtent * 2) / gridSize;
+
+    zSlices.forEach((z) => {
+      for (let row = 0; row < gridSize; row += 1) {
+        for (let col = 0; col < gridSize; col += 1) {
+          const x = xMin + col * step;
+          const y = yMin + row * step;
+          const center = [x + step / 2, y + step / 2];
+          if (!isNearOptimal(settings.z, center, settings.epsilon, settings)) {
+            continue;
+          }
+          cells.push({
+            corners: [
+              [x, y, z],
+              [x + step, y, z],
+              [x + step, y + step, z],
+              [x, y + step, z]
+            ]
+          });
+        }
+      }
+    });
+
+    inverse3dCellCache = { key, cells };
+    return cells;
+  }
+
+  function draw3dHalfspaceBoundaries(ctx, projector, xyExtent, zExtent, settings) {
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = demoColors.inverseBoundary;
+
+    settings.feasibleVertices.forEach((vertex) => {
+      const a = [settings.z[0] - vertex[0], settings.z[1] - vertex[1]];
+      if (Math.hypot(a[0], a[1]) < 1e-10) {
+        return;
+      }
+      const points = boundaryIntersections(a, settings.epsilon, -xyExtent, xyExtent, -xyExtent, xyExtent);
+      if (points.length < 2) {
+        return;
+      }
+      const lowerA = projector([points[0][0], points[0][1], -zExtent]);
+      const lowerB = projector([points[1][0], points[1][1], -zExtent]);
+      const upperA = projector([points[0][0], points[0][1], zExtent]);
+      const upperB = projector([points[1][0], points[1][1], zExtent]);
+      [[lowerA, lowerB], [upperA, upperB], [lowerA, upperA], [lowerB, upperB]].forEach(([start, end]) => {
+        ctx.beginPath();
+        ctx.moveTo(start[0], start[1]);
+        ctx.lineTo(end[0], end[1]);
+        ctx.stroke();
+      });
+    });
+
+    ctx.restore();
+  }
+
+  function draw3dSamples(ctx, projector, samples, settings) {
+    const projectedSamples = samples.map((sample, index) => {
+      const sample3d = makeOutcomeSample3d(sample, index, settings);
+      const projected = projector(sample3d);
+      return {
+        sample,
+        projected,
+        inside: isNearOptimal(settings.z, sample, settings.epsilon, settings)
+      };
+    });
+
+    ctx.save();
+    projectedSamples
+      .sort((a, b) => a.projected[2] - b.projected[2])
+      .forEach((item) => {
+        const depthScale = clamp(0.92 + item.projected[2] * 0.06, 0.72, 1.18);
+        ctx.beginPath();
+        ctx.arc(item.projected[0], item.projected[1], 4.1 * depthScale, 0, Math.PI * 2);
+        ctx.fillStyle = item.inside ? demoColors.nearOptimal : demoColors.notNearOptimal;
+        ctx.fill();
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+      });
+    ctx.restore();
+  }
+
+  function draw3dInteractionHint(ctx, plot) {
+    ctx.save();
+    ctx.fillStyle = "rgba(93, 107, 100, 0.9)";
+    ctx.font = "11px Arial, Helvetica, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("Educational 3D cross-sections. Drag to rotate; focus + arrow keys inspect.", plot.left, plot.bottom + 24);
+    ctx.restore();
+  }
+
+  function makeOutcomeSample3d(sample, index, settings) {
+    const pair = generatedSamplePairs[index] || [0, 0];
+    const sigmaScale = getSamplePatternSigmaScale(settings.samplePattern);
+    let third = 0.02 + settings.sigma * sigmaScale * (0.46 * pair[0] - 0.58 * pair[1]);
+    if (settings.samplePattern === "shifted") {
+      third += 0.16;
+    } else if (settings.samplePattern === "mixture") {
+      third += index % 2 === 0 ? -0.24 : 0.24;
+    }
+    return [sample[0], sample[1], third];
+  }
+
   function drawOutcomeDensity(ctx, plot, xMin, xMax, yMin, yMax, settings) {
     const densityWidth = 96;
     const densityHeight = 72;
@@ -2002,8 +2447,17 @@ document.addEventListener("DOMContentLoaded", () => {
     scheduleRender();
   }
 
+  function handleVisualizationModeChange() {
+    visualizationMode = normalizeVisualizationMode(getSelectedVisualizationMode(), controls.problemClass.value);
+    syncVisualizationInputs();
+    clearSampleSelection();
+    scheduleRender();
+  }
+
   function handleProblemClassChange() {
     clearSampleSelection();
+    visualizationMode = normalizeVisualizationMode(visualizationMode, controls.problemClass.value);
+    syncVisualizationInputs();
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
       selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClasses.binaryKnapsack);
     } else if (controls.problemClass.value === problemClasses.binaryKnapsack4d) {
@@ -2053,6 +2507,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getActiveSampleIndex() {
     return hoverSampleIndex === null ? pinnedSampleIndex : hoverSampleIndex;
+  }
+
+  function is3dModeActive() {
+    return visualizationMode === visualizationModes.threeD && supports3dVisualization(controls.problemClass.value);
   }
 
   function setVertexCount(count) {
