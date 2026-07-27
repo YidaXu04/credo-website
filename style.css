@@ -417,6 +417,81 @@ h3 {
   line-height: 1.18;
 }
 
+.visualization-control {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  grid-template-rows: minmax(18px, auto) 30px auto;
+}
+
+.visualization-control legend {
+  grid-column: 1 / -1;
+  padding: 0;
+}
+
+.segmented-control {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 30px;
+  border: 1px solid #b9c7bf;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.segmented-control label {
+  min-width: 0;
+  display: grid;
+}
+
+.segmented-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented-control span {
+  display: grid;
+  place-items: center;
+  min-height: 28px;
+  color: var(--muted);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented-control label + label span {
+  border-left: 1px solid var(--line);
+}
+
+.segmented-control input:checked + span {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.segmented-control input:focus-visible + span {
+  outline: 2px solid rgba(40, 92, 77, 0.34);
+  outline-offset: -2px;
+}
+
+.segmented-control input:disabled + span {
+  color: rgba(93, 107, 100, 0.74);
+  background: rgba(238, 243, 239, 0.62);
+  cursor: not-allowed;
+}
+
+.control-note {
+  grid-column: 1 / -1;
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.7rem;
+  line-height: 1.18;
+}
+
 #demo-vertex-control[hidden] {
   display: none;
 }
@@ -924,6 +999,20 @@ h3 {
   cursor: crosshair;
 }
 
+#outcome-canvas.is-3d-mode {
+  cursor: grab;
+  touch-action: none;
+}
+
+#outcome-canvas.is-3d-mode:active {
+  cursor: grabbing;
+}
+
+#outcome-canvas:focus-visible {
+  outline: 2px solid rgba(40, 92, 77, 0.34);
+  outline-offset: 3px;
+}
+
 .demo-legend {
   display: flex;
   flex-wrap: wrap;
@@ -997,6 +1086,15 @@ h3 {
 .legend-swatch.inverse {
   background: rgba(126, 143, 151, 0.18);
   border-color: rgba(83, 102, 111, 0.72);
+}
+
+.legend-swatch.volume {
+  background: rgba(178, 106, 44, 0.16);
+  border-color: rgba(178, 106, 44, 0.66);
+}
+
+.demo-shell:not([data-visualization-mode="3d"]) .demo-legend span:has(.legend-swatch.volume) {
+  display: none;
 }
 
 .outcome-note {

@@ -172,6 +172,21 @@
             <div class="control-group control-action">
               <button class="control-button" id="demo-resample" type="button">Resample outcomes</button>
             </div>
+
+            <fieldset class="control-group visualization-control" aria-describedby="demo-visualization-note">
+              <legend class="control-text-label">Visualization</legend>
+              <div class="segmented-control" role="radiogroup" aria-label="Outcome visualization mode">
+                <label>
+                  <input id="demo-visualization-2d" name="visualization-mode" type="radio" value="2d" checked>
+                  <span>2D</span>
+                </label>
+                <label>
+                  <input id="demo-visualization-3d" name="visualization-mode" type="radio" value="3d">
+                  <span>3D</span>
+                </label>
+              </div>
+              <p class="control-note" id="demo-visualization-note">2D is the default. 3D is an educational linear-program prototype.</p>
+            </fieldset>
           </div>
           <section class="objective-note formulation-block" id="demo-objective-note" aria-labelledby="demo-formulation-heading">
             <h3 id="demo-formulation-heading">Optimization problem</h3>
@@ -233,6 +248,7 @@
             <div class="demo-legend" aria-label="Outcome space legend">
               <span><i class="legend-swatch distribution"></i>Ground-truth simulated outcome density</span>
               <span><i class="legend-swatch inverse"></i>Inverse feasible region \(\pi^{-1}_{\epsilon}(z)\)</span>
+              <span><i class="legend-swatch volume"></i>3D inverse cross-sections</span>
               <span><i class="legend-dot inside"></i>Near-optimal</span>
               <span><i class="legend-dot outside"></i>Not near-optimal</span>
             </div>

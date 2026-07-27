@@ -10,7 +10,7 @@ Wenbin Zhou, Agni Orfanoudaki, Shixiang Zhu
 
 - `index.html` contains the project page content and section structure.
 - `style.css` contains all styling and responsive layout rules.
-- `script.js` contains the dependency-free interactive 2D linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demo logic and tab state management.
+- `script.js` contains the dependency-free interactive 2D linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demo logic, plus the first educational 3D visualization prototype for the linear-program demo.
 - `Conformalized Decision Risk Assessment.pdf` is linked from the Paper button when present in the project root.
 
 ## Local Preview
@@ -31,6 +31,14 @@ This repository is ready to deploy as a static site from the repository root usi
 ## Demo Scope
 
 The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear and convex quadratic program visualizations plus two small finite knapsack cases. The demo displays a compact, complete optimization formulation for every supported problem class, including the objective, decision variable domain, and constraints.
+
+### First 3D Prototype
+
+The visualization selector defaults to 2D. For the linear-program demo only, the selector can switch the outcome canvas into an educational 3D prototype. This view shows three outcome axes, generated outcome samples, and three stacked inverse near-optimal cross-sections for the selected decision `z`. The point colors, sample count, dispersion, distribution pattern, epsilon tolerance, conformalized-radius control, and selected decision remain synchronized with the existing risk-estimation controls.
+
+The 3D view is intentionally a visual prototype, not a full reproduction of the paper's computational method. It does not add real data, model training, a 3D optimizer, Algorithm 2, or theoretical guarantees. The linear-program risk estimate remains the same simplified static-demo estimator used by the 2D visualization. Quadratic and knapsack demos remain 2D; their 3D option is disabled with an explanatory note.
+
+Interaction in 3D mode is dependency-free canvas interaction: drag the outcome canvas to rotate the view, or focus the canvas and use the arrow keys. `Home` resets the 3D camera. Tabs preserve their own selected visualization mode and 3D camera angle.
 
 Knapsack (2D–2D) uses the 2D binary decision variable `z = (z1, z2)`, a linear objective `y^T z`, and one linear capacity constraint. Both the decision space and outcome space are visualized in 2D, and the feasible 2D binary points are solved exactly by enumeration.
 
