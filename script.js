@@ -370,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const dx = event.clientX - rotate3dDrag.x;
       const dy = event.clientY - rotate3dDrag.y;
       view3d = {
-        yaw: rotate3dDrag.yaw + dx * 0.012,
+        yaw: rotate3dDrag.yaw - dx * 0.012,
         pitch: clamp(rotate3dDrag.pitch + dy * 0.01, -1.12, 1.12)
       };
       scheduleRender();
@@ -431,9 +431,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const rotationStep = event.shiftKey ? 0.18 : 0.08;
     if (event.key === "ArrowLeft") {
-      view3d = { ...view3d, yaw: view3d.yaw - rotationStep };
-    } else if (event.key === "ArrowRight") {
       view3d = { ...view3d, yaw: view3d.yaw + rotationStep };
+    } else if (event.key === "ArrowRight") {
+      view3d = { ...view3d, yaw: view3d.yaw - rotationStep };
     } else if (event.key === "ArrowUp") {
       view3d = { ...view3d, pitch: clamp(view3d.pitch - rotationStep, -1.12, 1.12) };
     } else if (event.key === "ArrowDown") {
