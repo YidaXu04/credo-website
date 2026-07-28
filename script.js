@@ -11,9 +11,16 @@ document.addEventListener("DOMContentLoaded", () => {
     [1, 0],
     [0, 1]
   ];
+  const linear3dVertices = [
+    [0, 0, 0],
+    [1, 0.12, 0.08],
+    [0.14, 0.96, 0.18],
+    [0.2, 0.16, 1]
+  ];
   const sampleCountMax = 150;
   const problemClasses = {
     linear: "linear",
+    linear3d: "linear-3d",
     quadratic: "quadratic",
     binaryKnapsack: "binary-knapsack",
     binaryKnapsack4d: "binary-knapsack-4d"
@@ -138,8 +145,11 @@ document.addEventListener("DOMContentLoaded", () => {
     notNearOptimal: "#b84d3f"
   };
   const trueRiskSamples = makeNormalPairs(10000, 982451);
+  const trueRiskSampleTriples = makeNormalTriples(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
+  const calibrationPredictionTriples = makeNormalTriples(80, 8177);
+  const calibrationErrorTriples = makeNormalTriples(80, 46021);
   let tabCounter = 0;
   const tabs = [
     createTab("Tab 1", 24591),
@@ -148,10 +158,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeTabId = tabs[0].id;
   let boundaryVertices = [];
   let selectedZ = [0, 0];
+  let selectedLinear3dVertexIndex = 0;
   let selectedKnapsackZ = defaultKnapsackSelection.slice();
   let selectedKnapsack4dZ = defaultKnapsack4dSelection.slice();
   let generatedSampleSeed = 24591;
   let generatedSamplePairs = [];
+  let generatedSampleTriples = [];
   let scheduled = false;
   let dragTarget = null;
   let hoverSampleIndex = null;
@@ -285,6 +297,7 @@ document.addEventListener("DOMContentLoaded", () => {
   controls.resample.addEventListener("click", () => {
     generatedSampleSeed = makeResampleSeed();
     generatedSamplePairs = makeNormalPairs(sampleCountMax, generatedSampleSeed);
+    generatedSampleTriples = makeNormalTriples(sampleCountMax, generatedSampleSeed);
     clearSampleSelection();
     scheduleRender();
   });
@@ -296,6 +309,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   decisionCanvas.addEventListener("pointerdown", (event) => {
+    if (controls.problemClass.value === problemClasses.linear3d) {
+      selectLinear3dVertexFromEvent(event);
+      return;
+    }
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
       selectKnapsackDecisionFromEvent(event);
       return;
@@ -313,6 +330,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   decisionCanvas.addEventListener("click", (event) => {
+    if (controls.problemClass.value === problemClasses.linear3d) {
+      selectLinear3dVertexFromEvent(event);
+      return;
+    }
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
       selectKnapsackDecisionFromEvent(event);
     }
@@ -500,6 +521,7 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: vertices[0].slice(),
+      selectedLinear3dVertexIndex: 0,
       selectedKnapsackZ: defaultKnapsackSelection.slice(),
       selectedKnapsack4dZ: defaultKnapsack4dSelection.slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
@@ -515,7 +537,8 @@ document.addEventListener("DOMContentLoaded", () => {
       visualizationMode: visualizationModes.twoD,
       view3d: { ...default3dView },
       generatedSampleSeed: seed,
-      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
+      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed),
+      generatedSampleTriples: makeNormalTriples(sampleCountMax, seed)
     };
   }
 
@@ -526,6 +549,7 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: source.selectedZ.slice(),
+      selectedLinear3dVertexIndex: normalizeLinear3dVertexIndex(source.selectedLinear3dVertexIndex),
       selectedKnapsackZ: (source.selectedKnapsackZ || defaultKnapsackSelection).slice(),
       selectedKnapsack4dZ: (source.selectedKnapsack4dZ || defaultKnapsack4dSelection).slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
@@ -541,7 +565,8 @@ document.addEventListener("DOMContentLoaded", () => {
       visualizationMode: source.visualizationMode || visualizationModes.twoD,
       view3d: { ...(source.view3d || default3dView) },
       generatedSampleSeed: seed,
-      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed)
+      generatedSamplePairs: makeNormalPairs(sampleCountMax, seed),
+      generatedSampleTriples: makeNormalTriples(sampleCountMax, seed)
     };
   }
 
@@ -556,6 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     tab.selectedZ = selectedZ.slice();
+    tab.selectedLinear3dVertexIndex = normalizeLinear3dVertexIndex(selectedLinear3dVertexIndex);
     tab.selectedKnapsackZ = selectedKnapsackZ.slice();
     tab.selectedKnapsack4dZ = selectedKnapsack4dZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
@@ -572,12 +598,14 @@ document.addEventListener("DOMContentLoaded", () => {
     tab.view3d = { ...view3d };
     tab.generatedSampleSeed = generatedSampleSeed;
     tab.generatedSamplePairs = generatedSamplePairs.map((pair) => pair.slice());
+    tab.generatedSampleTriples = generatedSampleTriples.map((triple) => triple.slice());
   }
 
   function loadTabState(tab) {
     boundaryVertices = tab.boundaryVertices.map((vertex) => vertex.slice());
     invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
+    selectedLinear3dVertexIndex = normalizeLinear3dVertexIndex(tab.selectedLinear3dVertexIndex);
     selectedKnapsackZ = normalizeKnapsackSelection(tab.selectedKnapsackZ || defaultKnapsackSelection);
     selectedKnapsack4dZ = normalizeKnapsackSelection(
       tab.selectedKnapsack4dZ || defaultKnapsack4dSelection,
@@ -585,6 +613,8 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     generatedSampleSeed = tab.generatedSampleSeed;
     generatedSamplePairs = tab.generatedSamplePairs.map((pair) => pair.slice());
+    generatedSampleTriples = (tab.generatedSampleTriples || makeNormalTriples(sampleCountMax, generatedSampleSeed))
+      .map((triple) => triple.slice());
     controls.problemClass.value = tab.problemClass || problemClasses.linear;
     setQState({
       raw: tab.rawQ || tab.q || paperQuadraticMatrix,
@@ -676,12 +706,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function render() {
     const settings = readSettings();
     saveActiveTabState(settings);
-    const samples = generateSamples(generatedSamplePairs, settings);
+    const samples = generateSamples(settings);
     const residuals = generateResiduals(settings);
     const selectedRisk = estimateRisk(settings.z, samples, residuals, settings);
     const comparisonRisks = isKnapsackProblem(settings.problemClass)
       ? settings.knapsackDecisions.map((decision) => estimateRisk(decision.z, samples, residuals, settings))
-      : boundaryVertices.map((vertex) => estimateRisk(vertex, samples, residuals, settings));
+      : settings.feasibleVertices.map((vertex) => estimateRisk(vertex, samples, residuals, settings));
     const approximateTrueRisk = estimateTrueRisk(settings.z, settings);
 
     if (pinnedSampleIndex !== null && pinnedSampleIndex >= samples.length) {
@@ -692,7 +722,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     updateOutputs(settings);
-    if (settings.problemClass === problemClasses.binaryKnapsack) {
+    if (settings.problemClass === problemClasses.linear3d) {
+      drawLinear3dDecisionSpace(decisionCanvas, settings);
+    } else if (settings.problemClass === problemClasses.binaryKnapsack) {
       drawKnapsackDecisionSpace(decisionCanvas, settings.z);
     } else if (settings.problemClass === problemClasses.binaryKnapsack4d) {
       drawKnapsack4dDecisionUi(settings);
@@ -714,14 +746,19 @@ document.addEventListener("DOMContentLoaded", () => {
       selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClass);
     } else if (problemClass === problemClasses.binaryKnapsack4d) {
       selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClass);
+    } else if (problemClass === problemClasses.linear3d) {
+      selectedLinear3dVertexIndex = normalizeLinear3dVertexIndex(selectedLinear3dVertexIndex);
     } else {
       selectedZ = projectToFeasibleRegion(selectedZ);
     }
     const q = readActiveQ();
     const knapsackDecisions = isKnapsackProblem(problemClass) ? getKnapsackDecisionCache(problemClass).decisions : [];
+    const activeMode = problemClass === problemClasses.linear3d ? "monte-carlo" : controls.mode.value;
+    visualizationMode = normalizeVisualizationMode(visualizationMode, problemClass);
     return {
       z: getCurrentDecision(problemClass),
-      feasibleVertices: getFeasibleVertices(),
+      feasibleVertices: getFeasibleVertices(problemClass),
+      selectedLinear3dVertexIndex,
       problemClass,
       rawQ: readRawQ(),
       q,
@@ -731,48 +768,49 @@ document.addEventListener("DOMContentLoaded", () => {
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
       epsilon: Number.parseFloat(controls.epsilon.value),
-      mode: controls.mode.value,
-      visualizationMode: normalizeVisualizationMode(visualizationMode, problemClass),
+      mode: activeMode,
+      visualizationMode,
       view3d: { ...view3d }
     };
   }
 
   function updateOutputs(settings) {
-    controls.zValue.textContent = isKnapsackProblem(settings.problemClass)
-      ? `Selected ${getKnapsackConfig(settings.problemClass).dimension}D binary decision: z = ${formatBinaryVector(settings.z)}`
-      : `Current z: ${formatPoint(settings.z)}`;
+    controls.zValue.textContent = getCurrentDecisionLabel(settings);
     controls.vertexCountValue.value = String(boundaryVertices.length);
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
     updateQPanelVisibility(settings.problemClass);
     updateQStatus(settings.q);
-    updateProblemClassMath(settings.problemClass, settings.q, settings.visualizationMode);
+    updateProblemClassMath(settings);
     updateVisualizationAvailability(settings);
     updateModeVisibility(settings);
   }
 
-  function updateProblemClassMath(problemClass, q, activeVisualizationMode) {
+  function updateProblemClassMath(settings) {
+    const { problemClass, q, visualizationMode: activeVisualizationMode } = settings;
     const qKey = makeQKey(q);
     const vertexCount = boundaryVertices.length;
     const formulationKey = [
       problemClass,
       activeVisualizationMode,
       problemClass === problemClasses.quadratic ? qKey : "",
-      problemClass === problemClasses.linear || problemClass === problemClasses.quadratic ? vertexCount : ""
+      problemClass === problemClasses.linear || problemClass === problemClasses.quadratic ? vertexCount : "",
+      problemClass === problemClasses.linear3d ? selectedLinear3dVertexIndex : ""
     ].join("::");
     if (renderedFormulationKey === formulationKey) {
       return;
     }
     renderedFormulationKey = formulationKey;
 
-    controls.formulationBody.textContent = buildOptimizationFormulation(problemClass, q, vertexCount);
+    controls.formulationBody.textContent = buildOptimizationFormulation(settings, vertexCount);
     outcomeSubtitle.textContent = getOutcomeSubtitle(problemClass, activeVisualizationMode);
 
     typesetDynamicMath([controls.formulationBody, outcomeSubtitle]);
   }
 
-  function buildOptimizationFormulation(problemClass, q, vertexCount) {
+  function buildOptimizationFormulation(settings, vertexCount) {
+    const { problemClass, q } = settings;
     if (problemClass === problemClasses.quadratic) {
       return [
         "\\[",
@@ -815,6 +853,21 @@ document.addEventListener("DOMContentLoaded", () => {
       ].join("\n");
     }
 
+    if (problemClass === problemClasses.linear3d) {
+      const selectedVertex = settings.selectedLinear3dVertexIndex + 1;
+      return [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
+        "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
+        "& y\\in\\mathbb{R}^3",
+        "\\end{aligned}",
+        "\\]",
+        `Here \\(z=(z_1,z_2,z_3)\\), \\(y=(y_1,y_2,y_3)\\), and the selected decision is vertex \\(v_${selectedVertex}=${formatLatexVector(settings.z)}\\).`,
+        `\\(z\\) is \\(\\epsilon\\)-near-optimal when \\(y^\\top z \\leq \\min_{v\\in V} y^\\top v + \\epsilon\\), equivalently \\(y^\\top(z-v_j)\\leq\\epsilon\\) for each tetrahedron vertex \\(v_j\\).`
+      ].join("\n");
+    }
+
     return [
       "\\[",
       "\\begin{aligned}",
@@ -827,11 +880,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getOutcomeSubtitle(problemClass, activeVisualizationMode = visualizationModes.twoD) {
+    if (problemClass === problemClasses.linear3d) {
+      return "True 3D outcome samples vs. a voxel-slice approximation of \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    }
     if (activeVisualizationMode === visualizationModes.threeD) {
       if (problemClass === problemClasses.quadratic) {
         return "Educational 3D outcome samples vs. three stacked numerical \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
       }
-      return "Educational 3D outcome samples vs. three stacked \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
+      return "3D outcome samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
     }
     if (problemClass === problemClasses.quadratic) {
       return "Samples vs. numerically approximated \\(\\pi_{\\epsilon}^{-1}(z)\\).";
@@ -944,10 +1000,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const is2dKnapsack = settings.problemClass === problemClasses.binaryKnapsack;
     const is4dKnapsack = settings.problemClass === problemClasses.binaryKnapsack4d;
     const isKnapsack = isKnapsackProblem(settings.problemClass);
-    controls.vertexControl.hidden = isKnapsack;
+    const isLinear3d = settings.problemClass === problemClasses.linear3d;
+    controls.vertexControl.hidden = isKnapsack || isLinear3d;
     controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic;
-    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && decisionCanvas.classList.contains("is-dragging"));
-    decisionCanvas.classList.toggle("is-binary-mode", is2dKnapsack);
+    controls.mode.disabled = isLinear3d;
+    if (isLinear3d && controls.mode.value !== "monte-carlo") {
+      controls.mode.value = "monte-carlo";
+    }
+    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && !isLinear3d && decisionCanvas.classList.contains("is-dragging"));
+    decisionCanvas.classList.toggle("is-binary-mode", is2dKnapsack || isLinear3d);
     decisionCanvas.hidden = is4dKnapsack;
     knapsack4dDecisionUi.hidden = !is4dKnapsack;
     decisionHeading.textContent = "Decision space";
@@ -955,11 +1016,15 @@ document.addEventListener("DOMContentLoaded", () => {
       ? "\\(z\\) is a 2D binary decision and must be feasible."
       : is4dKnapsack
         ? "\\(z\\) is a 4D binary decision; infeasible item combinations are disabled."
-      : "Drag \\(z\\) or the boundary vertices.";
+        : isLinear3d
+          ? "\\(Z\\) is a fixed tetrahedron in \\(\\mathbb{R}^3\\). Click a vertex to select \\(z\\)."
+          : "Drag \\(z\\) or the boundary vertices.";
     const riskExplainerText = is2dKnapsack
       ? "The Knapsack (2D–2D) optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite 2D-decision boundary margin."
       : is4dKnapsack
         ? "The Knapsack (4D–2D) optimum is computed exactly over feasible 4D bitmasks; p-value and e-value modes use finite-decision margins in the 2D outcome space."
+        : isLinear3d
+          ? "The true 3D LP risk is estimated in Monte Carlo mode using generated samples \\(y=(y_1,y_2,y_3)\\) and exact vertex comparisons over the tetrahedron."
       : settings.visualizationMode === visualizationModes.threeD
         ? make3dRiskExplainer(settings.problemClass)
         : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
@@ -981,6 +1046,8 @@ document.addEventListener("DOMContentLoaded", () => {
       clearSampleSelection();
     }
 
+    const isLinear3d = settings.problemClass === problemClasses.linear3d;
+    controls.visualization2d.disabled = isLinear3d;
     controls.visualization3d.disabled = !supports3d;
     syncVisualizationInputs();
     const active3d = settings.visualizationMode === visualizationModes.threeD;
@@ -993,12 +1060,14 @@ document.addEventListener("DOMContentLoaded", () => {
     outcomeCanvas.setAttribute(
       "aria-label",
       active3d
-        ? "Educational 3D outcome samples and inverse near-optimal cross-sections. Drag to rotate, or focus and use arrow keys."
+        ? "3D outcome samples and inverse near-optimal region. Drag to rotate, or focus and use arrow keys."
         : "Outcome samples and inverse feasible region"
     );
-    controls.visualizationNote.textContent = supports3d
-      ? "2D is the default. 3D is an educational Linear/Quadratic prototype."
-      : "3D is available for Linear and Quadratic demos; Knapsack demos remain 2D-only.";
+    controls.visualizationNote.textContent = isLinear3d
+      ? "Linear program (3D) is always shown as a true 3D LP with Monte Carlo risk."
+      : supports3d
+        ? "2D is the default. Quadratic 3D is an educational 2D-derived approximation."
+        : "3D is available for Linear program (3D) and the educational Quadratic view; Knapsack demos remain 2D-only.";
   }
 
   function make3dRiskExplainer(problemClass) {
@@ -1006,14 +1075,17 @@ document.addEventListener("DOMContentLoaded", () => {
       return "Educational 3D visualization prototype for the quadratic program; inverse cross-sections use the same numerical candidate approximation as the 2D QP demo and do not reproduce Algorithm 2 or the paper's full guarantees.";
     }
 
-    return "Educational 3D visualization prototype for the linear program; inverse geometry uses the simplified demo's exact halfspace-style LP boundaries, while risk estimates still use the static-demo estimator and do not reproduce Algorithm 2 or the paper's full guarantees.";
+    return "True 3D LP visualization with exact vertex comparisons over a fixed tetrahedron and Monte Carlo risk under generated 3D outcomes.";
   }
 
   function supports3dVisualization(problemClass) {
-    return problemClass === problemClasses.linear || problemClass === problemClasses.quadratic;
+    return problemClass === problemClasses.linear3d || problemClass === problemClasses.quadratic;
   }
 
   function normalizeVisualizationMode(mode, problemClass) {
+    if (problemClass === problemClasses.linear3d) {
+      return visualizationModes.threeD;
+    }
     if (mode === visualizationModes.threeD && supports3dVisualization(problemClass)) {
       return visualizationModes.threeD;
     }
@@ -1031,6 +1103,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateDecisionLegend(problemClass) {
     decisionLegend.replaceChildren();
+    if (problemClass === problemClasses.linear3d) {
+      decisionLegend.append(
+        makeLegendItem("legend-swatch feasible", "Fixed tetrahedron \\(Z\\subset\\mathbb{R}^3\\)"),
+        makeLegendItem("legend-dot selected", "Selected vertex decision \\(z\\)"),
+        makeLegendItem("legend-dot vertex", "Tetrahedron vertex")
+      );
+      return;
+    }
+
     if (problemClass === problemClasses.binaryKnapsack) {
       decisionLegend.append(
         makeLegendItem("legend-dot selected", "Selected \\(z\\)"),
@@ -1184,11 +1265,16 @@ document.addEventListener("DOMContentLoaded", () => {
       : `Distance to inverse-region boundary for the selected sample: ${radius.toFixed(3)}.`;
   }
 
-  function generateSamples(sourcePairs, settings) {
+  function generateSamples(settings) {
     const samples = [];
     for (let i = 0; i < settings.k; i += 1) {
-      const [a, b] = sourcePairs[i];
-      samples.push(transformSamplePair(a, b, settings.sigma, settings.samplePattern, i));
+      if (settings.problemClass === problemClasses.linear3d) {
+        const [a, b, c] = generatedSampleTriples[i];
+        samples.push(transformSampleTriple(a, b, c, settings.sigma, settings.samplePattern, i));
+      } else {
+        const [a, b] = generatedSamplePairs[i];
+        samples.push(transformSamplePair(a, b, settings.sigma, settings.samplePattern, i));
+      }
     }
     return samples;
   }
@@ -1217,11 +1303,52 @@ document.addEventListener("DOMContentLoaded", () => {
     return baseline;
   }
 
+  function transformSampleTriple(a, b, c, sigma, samplePattern, index = 0) {
+    const sigmaScale = getSamplePatternSigmaScale(samplePattern);
+    const baseline = [
+      0.18 + sigma * sigmaScale * (0.88 * a + 0.18 * b - 0.12 * c),
+      0.04 + sigma * sigmaScale * (0.3 * a + 0.78 * b + 0.2 * c),
+      0.1 + sigma * sigmaScale * (-0.22 * a + 0.36 * b + 0.82 * c)
+    ];
+
+    if (samplePattern === "shifted") {
+      return [baseline[0] + 0.34, baseline[1] - 0.03, baseline[2] + 0.22];
+    }
+
+    if (samplePattern === "mixture") {
+      const firstCluster = index % 2 === 0;
+      const center = firstCluster ? [-0.09, 0.48, -0.32] : [0.62, -0.03, 0.38];
+      const spread = Math.max(0.05, sigma * 0.52);
+      return [
+        center[0] + spread * (0.72 * a + 0.1 * b + 0.2 * c),
+        center[1] + spread * (0.15 * a + 0.68 * b - 0.18 * c),
+        center[2] + spread * (-0.16 * a + 0.28 * b + 0.76 * c)
+      ];
+    }
+
+    return baseline;
+  }
+
   function getSamplePatternSigmaScale(samplePattern) {
     return samplePattern === "wider" ? 1.75 : 1;
   }
 
   function generateResiduals(settings) {
+    if (settings.problemClass === problemClasses.linear3d) {
+      return calibrationPredictionTriples.map((triple, index) => {
+        const [a, b, c] = triple;
+        const yhat = transformSampleTriple(a, b, c, settings.sigma, settings.samplePattern, index);
+        const [e1, e2, e3] = calibrationErrorTriples[index];
+        const scale = Math.max(0.025, settings.sigma * 0.16);
+        const y = [
+          yhat[0] + scale * e1,
+          yhat[1] + scale * e2,
+          yhat[2] + scale * e3
+        ];
+        return Math.hypot(y[0] - yhat[0], y[1] - yhat[1], y[2] - yhat[2]);
+      });
+    }
+
     return calibrationPredictions.map((pair, index) => {
       const [a, b] = pair;
       const yhat = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
@@ -1235,7 +1362,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function objective(y, z) {
-    return y[0] * z[0] + y[1] * z[1];
+    return dotProduct(y, z);
   }
 
   function knapsackValue(z, y) {
@@ -1334,12 +1461,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function halfspaceMargins(z, y, epsilon, feasibleVertices = getFeasibleVertices()) {
     return feasibleVertices
       .map((vertex) => {
-        const a = [z[0] - vertex[0], z[1] - vertex[1]];
-        const norm = Math.hypot(a[0], a[1]);
+        const a = z.map((value, index) => value - vertex[index]);
+        const norm = vectorNorm(a);
         if (norm < 1e-10) {
           return null;
         }
-        const signedMargin = epsilon - (a[0] * y[0] + a[1] * y[1]);
+        const signedMargin = epsilon - dotProduct(a, y);
         return signedMargin / norm;
       })
       .filter((margin) => margin !== null);
@@ -1476,13 +1603,114 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function estimateTrueRisk(z, settings) {
     let failures = 0;
-    trueRiskSamples.forEach(([a, b], index) => {
-      const sample = transformSamplePair(a, b, settings.sigma, settings.samplePattern, index);
+    const source = settings.problemClass === problemClasses.linear3d ? trueRiskSampleTriples : trueRiskSamples;
+    source.forEach((normalDraw, index) => {
+      const sample = settings.problemClass === problemClasses.linear3d
+        ? transformSampleTriple(normalDraw[0], normalDraw[1], normalDraw[2], settings.sigma, settings.samplePattern, index)
+        : transformSamplePair(normalDraw[0], normalDraw[1], settings.sigma, settings.samplePattern, index);
       if (!isNearOptimal(z, sample, settings.epsilon, settings)) {
         failures += 1;
       }
     });
-    return failures / trueRiskSamples.length;
+    return failures / source.length;
+  }
+
+  function drawLinear3dDecisionSpace(canvas, settings) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const plot = makeSquarePlot(width, height, { left: 34, right: 28, top: 22, bottom: 32 });
+    const bounds = { xMin: -0.08, xMax: 1.08, yMin: -0.08, yMax: 1.08, zMin: -0.08, zMax: 1.08 };
+    const projector = makeBoxProjector3d(plot, bounds, settings.view3d);
+    const projectedVertices = settings.feasibleVertices.map((vertex, index) => {
+      const projected = projector(vertex);
+      return { vertex, index, projected };
+    });
+    currentDecisionView = {
+      type: problemClasses.linear3d,
+      projectedVertices
+    };
+
+    clearCanvas(ctx, width, height);
+    draw3dBoxFromBounds(ctx, projector, bounds);
+    drawTetrahedron(ctx, projector, settings);
+    drawLinear3dDecisionAxes(ctx, projector, bounds);
+    draw3dInteractionHint(ctx, plot, "Click a vertex to select z. Rotate with the outcome canvas.");
+  }
+
+  function drawTetrahedron(ctx, projector, settings) {
+    const faces = [
+      [0, 1, 2],
+      [0, 1, 3],
+      [0, 2, 3],
+      [1, 2, 3]
+    ].map((face) => {
+      const points = face.map((index) => projector(settings.feasibleVertices[index]));
+      return {
+        face,
+        points,
+        depth: points.reduce((sum, point) => sum + point[2], 0) / points.length
+      };
+    });
+
+    ctx.save();
+    faces
+      .sort((a, b) => a.depth - b.depth)
+      .forEach((face) => {
+        ctx.beginPath();
+        ctx.moveTo(face.points[0][0], face.points[0][1]);
+        face.points.slice(1).forEach((point) => ctx.lineTo(point[0], point[1]));
+        ctx.closePath();
+        ctx.fillStyle = demoColors.feasibleFill;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(31, 36, 33, 0.62)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      });
+
+    settings.feasibleVertices
+      .map((vertex, index) => ({ vertex, index, projected: projector(vertex) }))
+      .sort((a, b) => a.projected[2] - b.projected[2])
+      .forEach((item) => {
+        const selected = item.index === settings.selectedLinear3dVertexIndex;
+        const [x, y] = item.projected;
+        ctx.beginPath();
+        ctx.arc(x, y, selected ? 9 : 6, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? demoColors.selectedFill : demoColors.vertexFill;
+        ctx.fill();
+        ctx.lineWidth = selected ? 4 : 2;
+        ctx.strokeStyle = selected ? demoColors.selectedRing : "#ffffff";
+        ctx.stroke();
+        ctx.fillStyle = selected ? demoColors.selectedText : "#17211c";
+        ctx.textAlign = "center";
+        drawIndexedMathLabel(ctx, "v", item.index + 1, x, y - 14, { size: 13 });
+      });
+    ctx.restore();
+  }
+
+  function drawLinear3dDecisionAxes(ctx, projector, bounds) {
+    const origin = projector([0, 0, 0]);
+    const axes = [
+      { end: [bounds.xMax, 0, 0], label: indexedCanvasLabel("z", 1), color: "rgba(23, 33, 28, 0.78)" },
+      { end: [0, bounds.yMax, 0], label: indexedCanvasLabel("z", 2), color: "rgba(40, 92, 77, 0.82)" },
+      { end: [0, 0, bounds.zMax], label: indexedCanvasLabel("z", 3), color: "rgba(178, 106, 44, 0.86)" }
+    ];
+
+    ctx.save();
+    axes.forEach((axis) => {
+      const end = projector(axis.end);
+      ctx.strokeStyle = axis.color;
+      ctx.fillStyle = axis.color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(origin[0], origin[1]);
+      ctx.lineTo(end[0], end[1]);
+      ctx.stroke();
+      draw3dArrowHead(ctx, origin, end);
+      ctx.textAlign = "left";
+      drawCanvasLabel(ctx, axis.label, end[0] + 5, end[1] - 5);
+    });
+    ctx.restore();
   }
 
   function drawDecisionSpace(canvas, z) {
@@ -1721,7 +1949,9 @@ document.addEventListener("DOMContentLoaded", () => {
     clearCanvas(ctx, width, height);
     draw3dBox(ctx, projector, extent, zExtent);
     draw3dInverseCrossSections(ctx, projector, extent, zExtent, settings);
-    if (settings.problemClass === problemClasses.linear) {
+    if (settings.problemClass === problemClasses.linear3d) {
+      draw3dLinearHalfspaceBoundaryPlanes(ctx, projector, extent, zExtent, settings);
+    } else if (settings.problemClass === problemClasses.linear) {
       draw3dHalfspaceBoundaries(ctx, projector, extent, zExtent, settings);
     }
     draw3dAxes(ctx, projector, extent, zExtent);
@@ -1755,6 +1985,26 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  function makeBoxProjector3d(plot, bounds, view) {
+    const center = [
+      (bounds.xMin + bounds.xMax) / 2,
+      (bounds.yMin + bounds.yMax) / 2,
+      (bounds.zMin + bounds.zMax) / 2
+    ];
+    const span = Math.max(
+      bounds.xMax - bounds.xMin,
+      bounds.yMax - bounds.yMin,
+      bounds.zMax - bounds.zMin,
+      1e-9
+    );
+    const projector = makeProjector3d(plot, span / 2, span / 2, view);
+    return (point) => projector([
+      point[0] - center[0],
+      point[1] - center[1],
+      point[2] - center[2]
+    ]);
+  }
+
   function draw3dBox(ctx, projector, xyExtent, zExtent) {
     const xMin = -xyExtent;
     const xMax = xyExtent;
@@ -1771,6 +2021,35 @@ document.addEventListener("DOMContentLoaded", () => {
       [xMax, yMin, zMax],
       [xMax, yMax, zMax],
       [xMin, yMax, zMax]
+    ].map((point) => projector(point));
+    const edges = [
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      [0, 4], [1, 5], [2, 6], [3, 7]
+    ];
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(93, 107, 100, 0.18)";
+    ctx.lineWidth = 1;
+    edges.forEach(([a, b]) => {
+      ctx.beginPath();
+      ctx.moveTo(corners[a][0], corners[a][1]);
+      ctx.lineTo(corners[b][0], corners[b][1]);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function draw3dBoxFromBounds(ctx, projector, bounds) {
+    const corners = [
+      [bounds.xMin, bounds.yMin, bounds.zMin],
+      [bounds.xMax, bounds.yMin, bounds.zMin],
+      [bounds.xMax, bounds.yMax, bounds.zMin],
+      [bounds.xMin, bounds.yMax, bounds.zMin],
+      [bounds.xMin, bounds.yMin, bounds.zMax],
+      [bounds.xMax, bounds.yMin, bounds.zMax],
+      [bounds.xMax, bounds.yMax, bounds.zMax],
+      [bounds.xMin, bounds.yMax, bounds.zMax]
     ].map((point) => projector(point));
     const edges = [
       [0, 1], [1, 2], [2, 3], [3, 0],
@@ -1873,7 +2152,9 @@ document.addEventListener("DOMContentLoaded", () => {
         for (let col = 0; col < gridSize; col += 1) {
           const x = xMin + col * step;
           const y = yMin + row * step;
-          const center = [x + step / 2, y + step / 2];
+          const center = settings.problemClass === problemClasses.linear3d
+            ? [x + step / 2, y + step / 2, z]
+            : [x + step / 2, y + step / 2];
           if (!isNearOptimal(settings.z, center, settings.epsilon, settings)) {
             continue;
           }
@@ -1940,9 +2221,46 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
+  function draw3dLinearHalfspaceBoundaryPlanes(ctx, projector, xyExtent, zExtent, settings) {
+    const bounds = {
+      xMin: -xyExtent,
+      xMax: xyExtent,
+      yMin: -xyExtent,
+      yMax: xyExtent,
+      zMin: -zExtent,
+      zMax: zExtent
+    };
+
+    ctx.save();
+    settings.feasibleVertices.forEach((vertex, index) => {
+      const normal = settings.z.map((value, coordIndex) => value - vertex[coordIndex]);
+      if (vectorNorm(normal) < 1e-10) {
+        return;
+      }
+      const polygon = planeBoxIntersectionPolygon(normal, settings.epsilon, bounds);
+      if (polygon.length < 3) {
+        return;
+      }
+      const projected = polygon.map((point) => projector(point));
+      ctx.beginPath();
+      ctx.moveTo(projected[0][0], projected[0][1]);
+      projected.slice(1).forEach((point) => ctx.lineTo(point[0], point[1]));
+      ctx.closePath();
+      ctx.fillStyle = index % 2 === 0 ? "rgba(83, 102, 111, 0.055)" : "rgba(178, 106, 44, 0.045)";
+      ctx.fill();
+      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 1.15;
+      ctx.strokeStyle = demoColors.inverseBoundary;
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function draw3dSamples(ctx, projector, samples, settings) {
     const projectedSamples = samples.map((sample, index) => {
-      const sample3d = makeOutcomeSample3d(sample, index, settings);
+      const sample3d = settings.problemClass === problemClasses.linear3d
+        ? sample
+        : makeOutcomeSample3d(sample, index, settings);
       const projected = projector(sample3d);
       return {
         sample,
@@ -1967,12 +2285,12 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  function draw3dInteractionHint(ctx, plot) {
+  function draw3dInteractionHint(ctx, plot, text = "Drag to rotate; focus + arrow keys inspect.") {
     ctx.save();
     ctx.fillStyle = "rgba(93, 107, 100, 0.9)";
     ctx.font = "11px Arial, Helvetica, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText("Educational 3D cross-sections. Drag to rotate; focus + arrow keys inspect.", plot.left, plot.bottom + 24);
+    ctx.fillText(text, plot.left, plot.bottom + 24);
     ctx.restore();
   }
 
@@ -2294,6 +2612,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getCurrentDecision(problemClass) {
+    if (problemClass === problemClasses.linear3d) {
+      return linear3dVertices[selectedLinear3dVertexIndex].slice();
+    }
     if (problemClass === problemClasses.binaryKnapsack) {
       return selectedKnapsackZ.slice();
     }
@@ -2301,6 +2622,16 @@ document.addEventListener("DOMContentLoaded", () => {
       return selectedKnapsack4dZ.slice();
     }
     return selectedZ.slice();
+  }
+
+  function getCurrentDecisionLabel(settings) {
+    if (settings.problemClass === problemClasses.linear3d) {
+      return `Selected 3D LP vertex: z = v${settings.selectedLinear3dVertexIndex + 1} = ${formatPoint(settings.z)}`;
+    }
+    if (isKnapsackProblem(settings.problemClass)) {
+      return `Selected ${getKnapsackConfig(settings.problemClass).dimension}D binary decision: z = ${formatBinaryVector(settings.z)}`;
+    }
+    return `Current z: ${formatPoint(settings.z)}`;
   }
 
   function toggleKnapsack4dItem(itemIndex) {
@@ -2349,6 +2680,10 @@ document.addEventListener("DOMContentLoaded", () => {
       return normalized;
     }
     return config.defaultSelection.slice();
+  }
+
+  function normalizeLinear3dVertexIndex(index) {
+    return Number.isInteger(index) && index >= 0 && index < linear3dVertices.length ? index : 0;
   }
 
   function getKnapsackDecisionCache(problemClass = problemClasses.binaryKnapsack) {
@@ -2420,6 +2755,29 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
   }
 
+  function selectLinear3dVertexFromEvent(event) {
+    if (!currentDecisionView || currentDecisionView.type !== problemClasses.linear3d) {
+      return;
+    }
+
+    const [pointerX, pointerY] = getCanvasPoint(decisionCanvas, event);
+    const nearest = currentDecisionView.projectedVertices
+      .map((item) => ({
+        index: item.index,
+        distance: Math.hypot(pointerX - item.projected[0], pointerY - item.projected[1])
+      }))
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    if (!nearest || nearest.distance > 18) {
+      return;
+    }
+
+    selectedLinear3dVertexIndex = nearest.index;
+    clearSampleSelection();
+    scheduleRender();
+    event.preventDefault();
+  }
+
   function updateDecisionDragFromEvent(event) {
     const [x, y] = getCanvasPoint(decisionCanvas, event);
     const point = clampPointToDecisionView(currentDecisionView.fromCanvas([x, y]));
@@ -2482,6 +2840,9 @@ document.addEventListener("DOMContentLoaded", () => {
       selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClasses.binaryKnapsack);
     } else if (controls.problemClass.value === problemClasses.binaryKnapsack4d) {
       selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClasses.binaryKnapsack4d);
+    } else if (controls.problemClass.value === problemClasses.linear3d) {
+      selectedLinear3dVertexIndex = normalizeLinear3dVertexIndex(selectedLinear3dVertexIndex);
+      controls.mode.value = "monte-carlo";
     }
     scheduleRender();
   }
@@ -2565,7 +2926,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function getFeasibleVertices() {
+  function getFeasibleVertices(problemClass = controls.problemClass.value) {
+    if (problemClass === problemClasses.linear3d) {
+      return linear3dVertices.map((vertex) => vertex.slice());
+    }
     return boundaryVertices.map((vertex) => vertex.slice());
   }
 
@@ -3013,6 +3377,68 @@ document.addEventListener("DOMContentLoaded", () => {
       .slice(0, 2);
   }
 
+  function planeBoxIntersectionPolygon(normal, offset, bounds) {
+    const corners = [
+      [bounds.xMin, bounds.yMin, bounds.zMin],
+      [bounds.xMax, bounds.yMin, bounds.zMin],
+      [bounds.xMax, bounds.yMax, bounds.zMin],
+      [bounds.xMin, bounds.yMax, bounds.zMin],
+      [bounds.xMin, bounds.yMin, bounds.zMax],
+      [bounds.xMax, bounds.yMin, bounds.zMax],
+      [bounds.xMax, bounds.yMax, bounds.zMax],
+      [bounds.xMin, bounds.yMax, bounds.zMax]
+    ];
+    const edges = [
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      [0, 4], [1, 5], [2, 6], [3, 7]
+    ];
+    const intersections = [];
+
+    edges.forEach(([startIndex, endIndex]) => {
+      const start = corners[startIndex];
+      const end = corners[endIndex];
+      const startValue = dotProduct(normal, start) - offset;
+      const endValue = dotProduct(normal, end) - offset;
+      if (Math.abs(startValue) < 1e-9) {
+        intersections.push(start);
+      }
+      if (startValue * endValue > 0 || Math.abs(startValue - endValue) < 1e-12) {
+        return;
+      }
+      const t = startValue / (startValue - endValue);
+      if (t < -1e-9 || t > 1 + 1e-9) {
+        return;
+      }
+      intersections.push([
+        start[0] + (end[0] - start[0]) * t,
+        start[1] + (end[1] - start[1]) * t,
+        start[2] + (end[2] - start[2]) * t
+      ]);
+    });
+
+    const unique = intersections.filter((point, index, array) => {
+      return array.findIndex((candidate) => squaredDistance3d(candidate, point) < 1e-12) === index;
+    });
+    if (unique.length < 3) {
+      return unique;
+    }
+
+    const center = unique.reduce((sum, point) => [
+      sum[0] + point[0] / unique.length,
+      sum[1] + point[1] / unique.length,
+      sum[2] + point[2] / unique.length
+    ], [0, 0, 0]);
+    const basisU = makePlaneBasisU(normal);
+    const basisV = cross3d(normal, basisU);
+    return unique.sort((a, b) => {
+      const da = subtract3d(a, center);
+      const db = subtract3d(b, center);
+      return Math.atan2(dotProduct(da, basisV), dotProduct(da, basisU))
+        - Math.atan2(dotProduct(db, basisV), dotProduct(db, basisU));
+    });
+  }
+
   function getCanvasPoint(canvas, event) {
     const rect = canvas.getBoundingClientRect();
     return [
@@ -3043,7 +3469,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function formatPoint(point) {
-    return `(${point[0].toFixed(2)}, ${point[1].toFixed(2)})`;
+    return `(${point.map((value) => value.toFixed(2)).join(", ")})`;
+  }
+
+  function formatLatexVector(point) {
+    return `(${point.map((value) => formatCompactNumber(value)).join(",")})`;
   }
 
   function formatBinaryVector(vector) {
@@ -3124,6 +3554,49 @@ document.addEventListener("DOMContentLoaded", () => {
     return a.length === b.length && a.every((value, index) => value === b[index]);
   }
 
+  function dotProduct(a, b) {
+    const dimension = Math.min(a.length, b.length);
+    let sum = 0;
+    for (let index = 0; index < dimension; index += 1) {
+      sum += a[index] * b[index];
+    }
+    return sum;
+  }
+
+  function vectorNorm(vector) {
+    return Math.hypot(...vector);
+  }
+
+  function squaredDistance3d(a, b) {
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  }
+
+  function subtract3d(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  }
+
+  function cross3d(a, b) {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ];
+  }
+
+  function makePlaneBasisU(normal) {
+    const normalized = normalizeVector3d(normal);
+    const reference = Math.abs(normalized[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0];
+    return normalizeVector3d(cross3d(reference, normalized));
+  }
+
+  function normalizeVector3d(vector) {
+    const length = vectorNorm(vector);
+    if (length < 1e-9) {
+      return [1, 0, 0];
+    }
+    return [vector[0] / length, vector[1] / length, vector[2] / length];
+  }
+
   function isConformalRadiusMode(mode) {
     return mode === "p-value" || mode === "e-value";
   }
@@ -3147,6 +3620,25 @@ document.addEventListener("DOMContentLoaded", () => {
       pairs.push([radius * Math.cos(angle), radius * Math.sin(angle)]);
     }
     return pairs;
+  }
+
+  function makeNormalTriples(count, seed) {
+    const random = mulberry32(seed);
+    const triples = [];
+    for (let i = 0; i < count; i += 1) {
+      const first = makeNormalPairFromRandom(random);
+      const second = makeNormalPairFromRandom(random);
+      triples.push([first[0], first[1], second[0]]);
+    }
+    return triples;
+  }
+
+  function makeNormalPairFromRandom(random) {
+    const u1 = Math.max(random(), 1e-12);
+    const u2 = random();
+    const radius = Math.sqrt(-2 * Math.log(u1));
+    const angle = 2 * Math.PI * u2;
+    return [radius * Math.cos(angle), radius * Math.sin(angle)];
   }
 
   function makeResampleSeed() {
