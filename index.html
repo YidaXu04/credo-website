@@ -61,7 +61,7 @@
         <p class="eyebrow">Interactive CREDO Demo</p>
         <h2>Audit a candidate decision in simplified optimization problems</h2>
         <p class="lead">
-          Compare saved tabs for simplified fixed-context linear, true 3D linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demos.
+          Compare saved tabs for simplified fixed-context linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demos, with Linear switching between 2D and true 3D views.
         </p>
       </div>
 
@@ -79,12 +79,11 @@
                 <label for="demo-problem-class">Problem class</label>
                 <span class="control-tooltip">
                   <button class="tooltip-trigger" type="button" aria-label="About problem class" aria-describedby="tip-problem-class" aria-expanded="false">?</button>
-                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between 2D linear/quadratic objectives, a true 3D linear program, and finite knapsack examples over 2D outcome spaces.</span>
+                  <span class="tooltip-popover" id="tip-problem-class" role="tooltip">Switches between linear, quadratic, and finite knapsack examples. Use Dimension / view to choose Linear 2D or true Linear 3D.</span>
                 </span>
               </div>
               <select id="demo-problem-class" name="problem-class" aria-describedby="tip-problem-class">
                 <option value="linear">Linear program</option>
-                <option value="linear-3d">Linear program (3D)</option>
                 <option value="quadratic">Quadratic program</option>
                 <option value="binary-knapsack">Knapsack (2D–2D)</option>
                 <option value="binary-knapsack-4d">Knapsack (4D–2D)</option>
@@ -175,8 +174,8 @@
             </div>
 
             <fieldset class="control-group visualization-control" aria-describedby="demo-visualization-note">
-              <legend class="control-text-label">Visualization</legend>
-              <div class="segmented-control" role="radiogroup" aria-label="Outcome visualization mode">
+              <legend class="control-text-label">Dimension / view</legend>
+              <div class="segmented-control" role="radiogroup" aria-label="Dimension and view mode">
                 <label>
                   <input id="demo-visualization-2d" name="visualization-mode" type="radio" value="2d" checked>
                   <span>2D</span>
@@ -186,7 +185,7 @@
                   <span>3D</span>
                 </label>
               </div>
-              <p class="control-note" id="demo-visualization-note">2D is the default. Linear program (3D) uses a true 3D LP; Quadratic 3D remains educational.</p>
+              <p class="control-note" id="demo-visualization-note">2D is the default. Linear 3D is a true LP; Quadratic 3D remains educational.</p>
             </fieldset>
           </div>
           <section class="objective-note formulation-block" id="demo-objective-note" aria-labelledby="demo-formulation-heading">

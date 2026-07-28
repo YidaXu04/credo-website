@@ -10,7 +10,7 @@ Wenbin Zhou, Agni Orfanoudaki, Shixiang Zhu
 
 - `index.html` contains the project page content and section structure.
 - `style.css` contains all styling and responsive layout rules.
-- `script.js` contains the dependency-free interactive 2D linear, true 3D linear, quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demo logic, plus the educational 3D visualization prototype for the quadratic demo.
+- `script.js` contains the dependency-free interactive Linear, Quadratic, Knapsack (2D–2D), and Knapsack (4D–2D) demo logic. Linear switches between a 2D LP and a true 3D LP; Quadratic has a standard 2D demo plus an educational 2D-derived 3D visualization.
 - `Conformalized Decision Risk Assessment.pdf` is linked from the Paper button when present in the project root.
 
 ## Local Preview
@@ -30,15 +30,15 @@ This repository is ready to deploy as a static site from the repository root usi
 
 ## Demo Scope
 
-The current interactive demo is intentionally limited to simplified fixed-context/marginal 2D linear, true 3D linear, and convex quadratic program visualizations plus two small finite knapsack cases. The demo displays a compact, complete optimization formulation for every supported problem class, including the objective, decision variable domain, and constraints.
+The current interactive demo is intentionally limited to simplified fixed-context/marginal Linear and convex Quadratic program visualizations plus two small finite knapsack cases. The demo displays a compact, complete optimization formulation for every supported problem class, including the objective, decision variable domain, and constraints.
 
 ### 3D Views
 
-The visualization selector defaults to 2D. The separate `Linear program (3D)` problem class is a genuine 3D LP with `z in R^3`, `y in R^3`, a fixed tetrahedral decision polytope `Z = conv{v1,v2,v3,v4}`, vertex selection for `z`, generated 3D outcome samples, and a voxel-slice approximation of the true inverse epsilon-near-optimal region. Its risk estimate is restricted to Monte Carlo mode so the sample evaluation remains mathematically consistent in 3D.
+The problem selector has one `Linear program` option. The Dimension / view selector switches it between the original 2D LP and a genuine 3D LP with `z in R^3`, `y in R^3`, a fixed tetrahedral decision polytope `Z = conv{v1,v2,v3,v4}`, generated 3D outcome samples, and a voxel-slice approximation of the true inverse epsilon-near-optimal region. In both dimensions, the selected feasible decision `z` is draggable; in 3D, `z` can move through the tetrahedron interior and clicking a tetrahedron vertex selects that vertex exactly. Linear 3D risk is restricted to Monte Carlo mode because p-value and e-value radii are only implemented for the 2D inverse-region geometry in this prototype.
 
-The quadratic-program 3D view remains an educational 2D-derived visualization prototype. It does not add real data, model training, a 3D optimizer, Algorithm 2, or theoretical guarantees. Its cross-sections are numerical approximations using the same finite candidate approximation already used by the 2D QP demo for `0.5 * z^T Q z + y^T z`.
+The quadratic-program 3D view remains an educational 2D-derived visualization prototype, not a true 3D QP. It does not add real data, model training, a 3D optimizer, Algorithm 2, or theoretical guarantees. Its cross-sections are numerical approximations using the same finite candidate approximation already used by the 2D QP demo for `0.5 * z^T Q z + y^T z`.
 
-Interaction in 3D mode is dependency-free canvas interaction: drag the outcome canvas to rotate the view, or focus the canvas and use the arrow keys. `ArrowLeft`/`ArrowRight` rotate horizontally, `ArrowUp`/`ArrowDown` adjust pitch, and `Home` resets the 3D camera. Keyboard focus is enabled only while an active 3D visualization is shown. Tabs preserve their own selected visualization mode, 3D camera angle, problem class, selected 3D LP vertex, Q configuration, and generated outcome settings.
+Interaction in 3D mode is dependency-free canvas interaction: drag Linear 3D's decision point within the tetrahedron, drag the outcome canvas to rotate the view, or focus the outcome canvas and use the arrow keys. `ArrowLeft`/`ArrowRight` rotate horizontally, `ArrowUp`/`ArrowDown` adjust pitch, and `Home` resets the 3D camera. Keyboard focus is enabled only while an active 3D visualization is shown. Tabs preserve their own selected dimension/view, 3D camera angle, problem class, Linear 2D decision, Linear 3D decision, Q configuration, and generated outcome settings.
 
 Both Knapsack demos remain 2D-only. Their 3D option is disabled with an explanatory note, and no general mixed-integer optimizer or 3D knapsack visualization is included.
 
