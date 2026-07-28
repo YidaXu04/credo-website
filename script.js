@@ -137,6 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     nearOptimal: "#285c4d",
     notNearOptimal: "#b84d3f"
   };
+  const subscriptDigits = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
   const trueRiskSamples = makeNormalPairs(10000, 982451);
   const calibrationPredictions = makeNormalPairs(80, 8177);
   const calibrationErrors = makeNormalPairs(80, 46021);
@@ -1535,9 +1536,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.strokeStyle = "#ffffff";
       ctx.stroke();
       ctx.fillStyle = "#17211c";
-      ctx.font = "13px Arial, Helvetica, sans-serif";
+      ctx.font = makeMathCanvasFont(13);
       ctx.textAlign = "center";
-      ctx.fillText(`v${index + 1}`, x, y - 15);
+      ctx.fillText(indexedMathLabel("v", index + 1), x, y - 15);
     });
 
     const [zx, zy] = toCanvas(z);
@@ -1550,9 +1551,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.stroke();
 
     ctx.fillStyle = demoColors.selectedText;
-    ctx.font = "700 13px Arial, Helvetica, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(`z = ${formatPoint(z)}`, Math.min(zx + 12, plot.right - 92), Math.max(zy - 12, plot.top + 16));
+    drawMathAssignmentLabel(ctx, "z", formatPoint(z), Math.min(zx + 12, plot.right - 92), Math.max(zy - 12, plot.top + 16));
   }
 
   function drawKnapsackDecisionSpace(canvas, z) {
@@ -1570,7 +1570,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     drawGrid(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, 0.5);
-    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, "z_1", "z_2");
+    drawAxes(ctx, plot, xMin, xMax, yMin, yMax, toCanvas, indexedMathLabel("z", 1), indexedMathLabel("z", 2));
 
     knapsackBinaryPoints.forEach((point) => {
       const [x, y] = toCanvas(point);
@@ -1614,9 +1614,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const [zx, zy] = toCanvas(z);
     ctx.fillStyle = demoColors.selectedText;
-    ctx.font = "700 13px Arial, Helvetica, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(`z = ${formatBinaryVector(z)}`, Math.min(zx + 12, plot.right - 76), Math.max(zy + 24, plot.top + 16));
+    drawMathAssignmentLabel(ctx, "z", formatBinaryVector(z), Math.min(zx + 12, plot.right - 76), Math.max(zy + 24, plot.top + 16));
   }
 
   function drawKnapsack4dDecisionUi(settings) {
@@ -1795,14 +1794,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function draw3dAxes(ctx, projector, xyExtent, zExtent) {
     const axes = [
-      { end: [xyExtent, 0, 0], label: "y1", color: "rgba(23, 33, 28, 0.78)" },
-      { end: [0, xyExtent, 0], label: "y2", color: "rgba(40, 92, 77, 0.82)" },
-      { end: [0, 0, zExtent], label: "y3", color: "rgba(178, 106, 44, 0.86)" }
+      { end: [xyExtent, 0, 0], label: indexedMathLabel("y", 1), color: "rgba(23, 33, 28, 0.78)" },
+      { end: [0, xyExtent, 0], label: indexedMathLabel("y", 2), color: "rgba(40, 92, 77, 0.82)" },
+      { end: [0, 0, zExtent], label: indexedMathLabel("y", 3), color: "rgba(178, 106, 44, 0.86)" }
     ];
     const origin = projector([0, 0, 0]);
 
     ctx.save();
-    ctx.font = "700 13px Arial, Helvetica, sans-serif";
+    ctx.font = makeMathCanvasFont(13);
     axes.forEach((axis) => {
       const end = projector(axis.end);
       ctx.strokeStyle = axis.color;
@@ -2957,7 +2956,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     ctx.fillStyle = "#17211c";
-    ctx.font = "13px Arial, Helvetica, sans-serif";
+    ctx.font = makeMathCanvasFont(13);
     ctx.textAlign = "right";
     ctx.fillText(xLabel, plot.right, plot.bottom + 30);
     ctx.textAlign = "left";
@@ -3050,6 +3049,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function formatBinaryVector(vector) {
     return `(${vector.map((value) => value === 1 ? "1" : "0").join(",")})`;
+  }
+
+  function toSubscriptIndex(index) {
+    return String(index).split("").map((digit) => subscriptDigits[Number.parseInt(digit, 10)]).join("");
+  }
+
+  function indexedMathLabel(symbol, index) {
+    return `${symbol}${toSubscriptIndex(index)}`;
+  }
+
+  function makeMathCanvasFont(size) {
+    return `italic ${size}px Georgia, "Times New Roman", serif`;
+  }
+
+  function drawMathAssignmentLabel(ctx, variable, value, x, y) {
+    ctx.save();
+    ctx.font = makeMathCanvasFont(13);
+    ctx.fillText(variable, x, y);
+    const variableWidth = ctx.measureText(variable).width;
+    ctx.font = "700 13px Arial, Helvetica, sans-serif";
+    ctx.fillText(` = ${value}`, x + variableWidth, y);
+    ctx.restore();
   }
 
   function pointsEqual(a, b) {
