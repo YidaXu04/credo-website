@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     twoD: "2d",
     threeD: "3d"
   };
-  const linear3dCandidateResolution = 24;
+  const defaultLinear3dWeights = [1, 0, 0, 0];
   const default3dView = {
     yaw: -0.64,
     pitch: 0.52
@@ -91,7 +91,11 @@ document.addEventListener("DOMContentLoaded", () => {
     vertexControl: document.getElementById("demo-vertex-control"),
     visualization2d: document.getElementById("demo-visualization-2d"),
     visualization3d: document.getElementById("demo-visualization-3d"),
-    visualizationNote: document.getElementById("demo-visualization-note")
+    visualizationNote: document.getElementById("demo-visualization-note"),
+    linear3dWeightsPanel: document.getElementById("linear-3d-weights-panel"),
+    linear3dWeightInputs: Array.from(document.querySelectorAll("#linear-3d-weight-grid input[type=\"range\"]")),
+    linear3dWeightOutputs: Array.from(document.querySelectorAll("#linear-3d-weight-grid output")),
+    linear3dWeightCoordinate: document.getElementById("linear-3d-weight-coordinate")
   };
 
   const demoTabs = document.getElementById("demo-tabs");
@@ -126,6 +130,8 @@ document.addEventListener("DOMContentLoaded", () => {
     || !trueRiskValue
     || !riskBars
     || !riskExplainer
+    || controls.linear3dWeightInputs.length !== linear3dVertices.length
+    || controls.linear3dWeightOutputs.length !== linear3dVertices.length
   ) {
     return;
   }
@@ -161,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeTabId = tabs[0].id;
   let boundaryVertices = [];
   let selectedZ = [0, 0];
-  let selectedLinear3dZ = linear3dVertices[0].slice();
+  let selectedLinear3dWeights = defaultLinear3dWeights.slice();
   let selectedKnapsackZ = defaultKnapsackSelection.slice();
   let selectedKnapsack4dZ = defaultKnapsack4dSelection.slice();
   let generatedSampleSeed = 24591;
@@ -311,10 +317,15 @@ document.addEventListener("DOMContentLoaded", () => {
   [controls.visualization2d, controls.visualization3d].forEach((control) => {
     control.addEventListener("change", handleVisualizationModeChange);
   });
+  controls.linear3dWeightInputs.forEach((control, index) => {
+    control.dataset.weightIndex = String(index);
+    control.addEventListener("input", handleLinear3dWeightInput);
+    control.addEventListener("change", handleLinear3dWeightInput);
+  });
 
   decisionCanvas.addEventListener("pointerdown", (event) => {
     if (isTrueLinear3dMode(controls.problemClass.value, visualizationMode)) {
-      beginLinear3dDecisionDragFromEvent(event);
+      selectLinear3dVertexFromEvent(event);
       return;
     }
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
@@ -353,11 +364,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   decisionCanvas.addEventListener("pointermove", (event) => {
     if (dragTarget) {
-      if (dragTarget.type === "linear3d-selected") {
-        updateLinear3dDecisionDragFromEvent(event);
-      } else {
-        updateDecisionDragFromEvent(event);
-      }
+      updateDecisionDragFromEvent(event);
     }
   });
 
@@ -525,7 +532,8 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: vertices[0].slice(),
-      selectedLinear3dZ: linear3dVertices[0].slice(),
+      selectedLinear3dWeights: defaultLinear3dWeights.slice(),
+      selectedLinear3dZ: combineTetrahedronWeights(linear3dVertices, defaultLinear3dWeights),
       selectedKnapsackZ: defaultKnapsackSelection.slice(),
       selectedKnapsack4dZ: defaultKnapsack4dSelection.slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
@@ -555,7 +563,8 @@ document.addEventListener("DOMContentLoaded", () => {
       id: `tab-${tabCounter}`,
       label,
       selectedZ: source.selectedZ.slice(),
-      selectedLinear3dZ: normalizeLinear3dDecision(source.selectedLinear3dZ, source.selectedLinear3dVertexIndex),
+      selectedLinear3dWeights: source.selectedLinear3dWeights.slice(),
+      selectedLinear3dZ: deriveLinear3dDecision(source.selectedLinear3dWeights),
       selectedKnapsackZ: (source.selectedKnapsackZ || defaultKnapsackSelection).slice(),
       selectedKnapsack4dZ: (source.selectedKnapsack4dZ || defaultKnapsack4dSelection).slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
@@ -588,7 +597,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     tab.selectedZ = selectedZ.slice();
-    tab.selectedLinear3dZ = normalizeLinear3dDecision(selectedLinear3dZ);
+    tab.selectedLinear3dWeights = normalizeLinear3dWeights(selectedLinear3dWeights);
+    tab.selectedLinear3dZ = deriveLinear3dDecision(tab.selectedLinear3dWeights);
     tab.selectedKnapsackZ = selectedKnapsackZ.slice();
     tab.selectedKnapsack4dZ = selectedKnapsack4dZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
@@ -616,7 +626,7 @@ document.addEventListener("DOMContentLoaded", () => {
     boundaryVertices = tab.boundaryVertices.map((vertex) => vertex.slice());
     invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
-    selectedLinear3dZ = normalizeLinear3dDecision(tab.selectedLinear3dZ, tab.selectedLinear3dVertexIndex);
+    selectedLinear3dWeights = normalizeLinear3dWeights(tab.selectedLinear3dWeights);
     selectedKnapsackZ = normalizeKnapsackSelection(tab.selectedKnapsackZ || defaultKnapsackSelection);
     selectedKnapsack4dZ = normalizeKnapsackSelection(
       tab.selectedKnapsack4dZ || defaultKnapsack4dSelection,
@@ -761,7 +771,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (problemClass === problemClasses.binaryKnapsack4d) {
       selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClass);
     } else if (isLinear3d) {
-      selectedLinear3dZ = normalizeLinear3dDecision(selectedLinear3dZ);
+      selectedLinear3dWeights = normalizeLinear3dWeights(selectedLinear3dWeights);
     } else {
       selectedZ = projectToFeasibleRegion(selectedZ);
     }
@@ -778,6 +788,7 @@ document.addEventListener("DOMContentLoaded", () => {
       q,
       qpCandidates: problemClass === problemClasses.quadratic ? getQpCandidateCache(q).candidates : [],
       knapsackDecisions,
+      linear3dWeights: selectedLinear3dWeights.slice(),
       samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
@@ -799,6 +810,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateProblemClassMath(settings);
     updateVisualizationAvailability(settings);
     updateModeVisibility(settings);
+    updateLinear3dWeightControls(settings);
   }
 
   function updateProblemClassMath(settings) {
@@ -1016,6 +1028,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isLinear3d = settings.isLinear3d;
     controls.vertexControl.hidden = isKnapsack || isLinear3d;
     controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic;
+    controls.linear3dWeightsPanel.hidden = !isLinear3d;
     controls.mode.disabled = isLinear3d;
     if (!isLinear3d && controls.mode.value !== preferredRiskMode) {
       controls.mode.value = preferredRiskMode;
@@ -1025,8 +1038,10 @@ document.addEventListener("DOMContentLoaded", () => {
       preferredRiskMode = normalizeRiskMode(controls.mode.value);
       controls.mode.value = "monte-carlo";
     }
-    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && decisionCanvas.classList.contains("is-dragging"));
+    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && !isLinear3d && decisionCanvas.classList.contains("is-dragging"));
+    decisionCanvas.classList.toggle("is-direct-manipulation", !isKnapsack && !isLinear3d && !is4dKnapsack);
     decisionCanvas.classList.toggle("is-binary-mode", is2dKnapsack);
+    decisionCanvas.classList.toggle("is-vertex-select-mode", isLinear3d);
     decisionCanvas.hidden = is4dKnapsack;
     knapsack4dDecisionUi.hidden = !is4dKnapsack;
     decisionHeading.textContent = "Decision space";
@@ -1035,7 +1050,7 @@ document.addEventListener("DOMContentLoaded", () => {
       : is4dKnapsack
         ? "\\(z\\) is a 4D binary decision; infeasible item combinations are disabled."
         : isLinear3d
-          ? "Drag \\(z\\) within the fixed tetrahedron; clicking a vertex selects it exactly."
+          ? "Adjust the decision weights or click a vertex to select \\(z\\)."
           : "Drag \\(z\\) or the boundary vertices.";
     const riskExplainerText = is2dKnapsack
       ? "The Knapsack (2D–2D) optimum is computed exactly by enumerating this small finite feasible set; p-value and e-value modes use the finite 2D-decision boundary margin."
@@ -1054,6 +1069,19 @@ document.addEventListener("DOMContentLoaded", () => {
       updateDecisionLegend(settings);
       typesetDynamicMath([decisionSubtitle, riskExplainer, decisionLegend]);
     }
+  }
+
+  function updateLinear3dWeightControls(settings) {
+    if (!settings.isLinear3d) {
+      return;
+    }
+    const weights = normalizeLinear3dWeights(settings.linear3dWeights);
+    weights.forEach((weight, index) => {
+      controls.linear3dWeightInputs[index].value = weight.toFixed(2);
+      controls.linear3dWeightOutputs[index].value = weight.toFixed(2);
+      controls.linear3dWeightOutputs[index].textContent = weight.toFixed(2);
+    });
+    controls.linear3dWeightCoordinate.textContent = `z = ${formatPoint(settings.z)}`;
   }
 
   function updateVisualizationAvailability(settings) {
@@ -1645,24 +1673,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const projected = projector(vertex);
       return { vertex, index, projected };
     });
-    const feasibleCandidates = makeLinear3dFeasibleCandidates(settings.feasibleVertices, linear3dCandidateResolution)
-      .map((point) => ({
-        point,
-        projected: projector(point)
-      }));
-    const projectedDecision = projector(settings.z);
     currentDecisionView = {
       type: "linear-3d-decision",
-      projectedVertices,
-      feasibleCandidates,
-      projectedDecision
+      projectedVertices
     };
 
     clearCanvas(ctx, width, height);
     draw3dBoxFromBounds(ctx, projector, bounds);
     drawTetrahedron(ctx, projector, settings);
     drawLinear3dDecisionAxes(ctx, projector, bounds);
-    draw3dInteractionHint(ctx, plot, "Drag z within the tetrahedron. Click a vertex for an exact vertex.");
+    draw3dInteractionHint(ctx, plot, "Click a vertex for an exact vertex decision.");
   }
 
   function drawTetrahedron(ctx, projector, settings) {
@@ -2667,10 +2687,8 @@ document.addEventListener("DOMContentLoaded", () => {
       tab.problemClass = normalizeProblemClass(oldProblemClass || problemClasses.linear);
       tab.visualizationMode = normalizeVisualizationMode(tab.visualizationMode || visualizationModes.twoD, tab.problemClass);
     }
-    const storedLinear3dPoint = Array.isArray(tab.selectedLinear3dZ) && tab.selectedLinear3dZ.length >= 3
-      ? tab.selectedLinear3dZ
-      : tab.selectedZ;
-    tab.selectedLinear3dZ = normalizeLinear3dDecision(storedLinear3dPoint, tab.selectedLinear3dVertexIndex);
+    tab.selectedLinear3dWeights = migrateLinear3dWeights(tab);
+    tab.selectedLinear3dZ = deriveLinear3dDecision(tab.selectedLinear3dWeights);
     tab.selectedZ = Array.isArray(tab.selectedZ) && tab.selectedZ.length >= 2 ? tab.selectedZ.slice(0, 2) : defaultVertices[0].slice();
     tab.mode = normalizeRiskMode(tab.mode || "monte-carlo");
     tab.preferredRiskMode = normalizeRiskMode(tab.preferredRiskMode || tab.mode);
@@ -2691,36 +2709,83 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeProblemClass(problemClass) === problemClasses.linear && mode === visualizationModes.threeD;
   }
 
-  function normalizeLinear3dDecision(point, fallbackVertexIndex = 0) {
-    if (Array.isArray(point) && point.length >= 3 && point.every(Number.isFinite)) {
-      return projectToTetrahedronCandidates(point.slice(0, 3));
+  function migrateLinear3dWeights(tab) {
+    const storedWeights = normalizeLinear3dWeightsIfValid(tab.selectedLinear3dWeights);
+    if (storedWeights) {
+      return storedWeights;
     }
-    const fallbackIndex = Number.isInteger(fallbackVertexIndex)
-      && fallbackVertexIndex >= 0
-      && fallbackVertexIndex < linear3dVertices.length
-      ? fallbackVertexIndex
+
+    const storedLinear3dPoint = Array.isArray(tab.selectedLinear3dZ) && tab.selectedLinear3dZ.length >= 3
+      ? tab.selectedLinear3dZ
+      : tab.selectedZ;
+    const pointWeights = linear3dPointToWeights(storedLinear3dPoint);
+    if (pointWeights) {
+      return pointWeights;
+    }
+
+    return makeLinear3dOneHotWeights(tab.selectedLinear3dVertexIndex);
+  }
+
+  function normalizeLinear3dWeightsIfValid(weights) {
+    if (!Array.isArray(weights) || weights.length < linear3dVertices.length) {
+      return null;
+    }
+    const raw = weights.slice(0, linear3dVertices.length);
+    if (!raw.every(Number.isFinite) || raw.some((weight) => weight < -1e-6)) {
+      return null;
+    }
+    return normalizeLinear3dWeights(raw);
+  }
+
+  function normalizeLinear3dWeights(weights, fallback = defaultLinear3dWeights) {
+    const raw = Array.isArray(weights) && weights.length >= linear3dVertices.length
+      ? weights.slice(0, linear3dVertices.length)
+      : fallback.slice();
+    const clamped = raw.map((weight) => Number.isFinite(weight) ? clamp01(weight) : 0);
+    const sum = clamped.reduce((total, weight) => total + weight, 0);
+    if (sum <= 1e-9) {
+      return fallback.slice();
+    }
+    const normalized = clamped.map((weight) => weight / sum);
+    const normalizedSum = normalized.reduce((total, weight) => total + weight, 0);
+    normalized[normalized.length - 1] = clamp01(normalized[normalized.length - 1] + (1 - normalizedSum));
+    return normalized;
+  }
+
+  function makeLinear3dOneHotWeights(vertexIndex = 0) {
+    const fallbackIndex = Number.isInteger(vertexIndex)
+      && vertexIndex >= 0
+      && vertexIndex < linear3dVertices.length
+      ? vertexIndex
       : 0;
-    return linear3dVertices[fallbackIndex].slice();
+    return linear3dVertices.map((_, index) => index === fallbackIndex ? 1 : 0);
   }
 
-  function makeLinear3dFeasibleCandidates(vertices, resolution) {
-    const candidates = [];
-    for (let i = 0; i <= resolution; i += 1) {
-      for (let j = 0; j <= resolution - i; j += 1) {
-        for (let k = 0; k <= resolution - i - j; k += 1) {
-          const l = resolution - i - j - k;
-          const weights = [i, j, k, l].map((value) => value / resolution);
-          candidates.push(combineTetrahedronWeights(vertices, weights));
-        }
-      }
+  function linear3dPointToWeights(point) {
+    if (!Array.isArray(point) || point.length < 3 || !point.slice(0, 3).every(Number.isFinite)) {
+      return null;
     }
-    return candidates;
+    const origin = linear3dVertices[0];
+    const edge1 = subtract3d(linear3dVertices[1], origin);
+    const edge2 = subtract3d(linear3dVertices[2], origin);
+    const edge3 = subtract3d(linear3dVertices[3], origin);
+    const relative = subtract3d(point.slice(0, 3), origin);
+    const denominator = dotProduct(edge1, cross3d(edge2, edge3));
+    if (Math.abs(denominator) < 1e-12) {
+      return null;
+    }
+    const w2 = dotProduct(relative, cross3d(edge2, edge3)) / denominator;
+    const w3 = dotProduct(edge1, cross3d(relative, edge3)) / denominator;
+    const w4 = dotProduct(edge1, cross3d(edge2, relative)) / denominator;
+    const raw = [1 - w2 - w3 - w4, w2, w3, w4];
+    if (raw.some((weight) => weight < -1e-5 || weight > 1 + 1e-5)) {
+      return null;
+    }
+    return normalizeLinear3dWeights(raw);
   }
 
-  function projectToTetrahedronCandidates(point) {
-    return makeLinear3dFeasibleCandidates(linear3dVertices, linear3dCandidateResolution)
-      .sort((a, b) => squaredDistance3d(point, a) - squaredDistance3d(point, b))[0]
-      .slice();
+  function deriveLinear3dDecision(weights) {
+    return combineTetrahedronWeights(linear3dVertices, normalizeLinear3dWeights(weights));
   }
 
   function combineTetrahedronWeights(vertices, weights) {
@@ -2733,7 +2798,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getCurrentDecision(problemClass) {
     if (isTrueLinear3dMode(problemClass, visualizationMode)) {
-      return selectedLinear3dZ.slice();
+      return deriveLinear3dDecision(selectedLinear3dWeights);
     }
     if (problemClass === problemClasses.binaryKnapsack) {
       return selectedKnapsackZ.slice();
@@ -2871,16 +2936,12 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
   }
 
-  function beginLinear3dDecisionDragFromEvent(event) {
+  function selectLinear3dVertexFromEvent(event) {
     if (!currentDecisionView || currentDecisionView.type !== "linear-3d-decision") {
       return;
     }
 
     const [pointerX, pointerY] = getCanvasPoint(decisionCanvas, event);
-    const selectedDistance = Math.hypot(
-      pointerX - currentDecisionView.projectedDecision[0],
-      pointerY - currentDecisionView.projectedDecision[1]
-    );
     const nearestVertex = currentDecisionView.projectedVertices
       .map((item) => ({
         index: item.index,
@@ -2889,40 +2950,57 @@ document.addEventListener("DOMContentLoaded", () => {
       .sort((a, b) => a.distance - b.distance)[0];
 
     if (nearestVertex && nearestVertex.distance <= 18) {
-      selectedLinear3dZ = linear3dVertices[nearestVertex.index].slice();
+      selectedLinear3dWeights = makeLinear3dOneHotWeights(nearestVertex.index);
       clearSampleSelection();
       scheduleRender();
-    } else if (selectedDistance > 16) {
-      return;
+      event.preventDefault();
     }
-
-    dragTarget = { type: "linear3d-selected" };
-    decisionCanvas.classList.add("is-dragging");
-    decisionCanvas.setPointerCapture(event.pointerId);
-    event.preventDefault();
   }
 
-  function updateLinear3dDecisionDragFromEvent(event) {
-    if (!currentDecisionView || currentDecisionView.type !== "linear-3d-decision") {
+  function handleLinear3dWeightInput(event) {
+    const weightIndex = Number.parseInt(event.currentTarget.dataset.weightIndex, 10);
+    const target = Number.parseFloat(event.currentTarget.value);
+    if (!Number.isInteger(weightIndex) || !Number.isFinite(target)) {
       return;
     }
 
-    const [pointerX, pointerY] = getCanvasPoint(decisionCanvas, event);
-    const nearest = currentDecisionView.feasibleCandidates
-      .map((candidate) => ({
-        point: candidate.point,
-        distance: Math.hypot(pointerX - candidate.projected[0], pointerY - candidate.projected[1])
-      }))
-      .sort((a, b) => a.distance - b.distance)[0];
-
-    if (!nearest) {
-      return;
-    }
-
-    selectedLinear3dZ = nearest.point.slice();
+    selectedLinear3dWeights = updateLinear3dWeight(selectedLinear3dWeights, weightIndex, target);
     clearSampleSelection();
     scheduleRender();
-    event.preventDefault();
+  }
+
+  function updateLinear3dWeight(weights, changedIndex, targetValue) {
+    const current = normalizeLinear3dWeights(weights);
+    const target = clamp01(targetValue);
+    const remainingTarget = 1 - target;
+    const otherIndices = current
+      .map((_, index) => index)
+      .filter((index) => index !== changedIndex);
+    const oldOtherSum = otherIndices.reduce((sum, index) => sum + current[index], 0);
+    const next = current.map(() => 0);
+    next[changedIndex] = target;
+
+    if (oldOtherSum <= 1e-12) {
+      const equalShare = remainingTarget / otherIndices.length;
+      otherIndices.forEach((index) => {
+        next[index] = equalShare;
+      });
+    } else {
+      otherIndices.forEach((index) => {
+        next[index] = (current[index] / oldOtherSum) * remainingTarget;
+      });
+    }
+
+    const otherSum = otherIndices.reduce((sum, index) => sum + next[index], 0);
+    const correction = remainingTarget - otherSum;
+    if (Math.abs(correction) > 1e-12) {
+      const correctionIndex = otherIndices
+        .slice()
+        .sort((a, b) => next[b] - next[a])[0];
+      next[correctionIndex] = clamp01(next[correctionIndex] + correction);
+    }
+    next[changedIndex] = target;
+    return next;
   }
 
   function updateDecisionDragFromEvent(event) {
