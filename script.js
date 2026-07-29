@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
     threeD: "3d"
   };
   const defaultLinear3dWeights = [1, 0, 0, 0];
+  const defaultQuadratic3dWeights = [0.25, 0.25, 0.25, 0.25];
   const default3dView = {
     yaw: -0.64,
     pitch: 0.52
@@ -59,12 +60,28 @@ document.addEventListener("DOMContentLoaded", () => {
     q12: 0,
     q22: 0.1
   };
+  const paperQuadratic3dMatrix = [
+    [0.1, 0, 0],
+    [0, 0.1, 0],
+    [0, 0, 0.1]
+  ];
   const qDiagonalMin = 0.05;
   const qDiagonalMax = 2;
   const qOffDiagonalMargin = 1e-4;
   const quadraticRasterStep = 9;
   const linearRasterStep = 5;
   const qpInteriorGridSize = 21;
+  const quadratic3dVoxelGridSize = 11;
+  const barycentricSupportMasks = Array.from({ length: 15 }, (_, index) => index + 1);
+  const barycentricSupportDefinitions = barycentricSupportMasks.map((mask) => {
+    const support = [];
+    for (let index = 0; index < linear3dVertices.length; index += 1) {
+      if ((mask & (1 << index)) !== 0) {
+        support.push(index);
+      }
+    }
+    return { mask, support };
+  });
 
   const controls = {
     zValue: document.getElementById("demo-z-value"),
@@ -95,6 +112,9 @@ document.addEventListener("DOMContentLoaded", () => {
     linear3dWeightsPanel: document.getElementById("linear-3d-weights-panel"),
     linear3dWeightInputs: Array.from(document.querySelectorAll("#linear-3d-weight-grid input[type=\"range\"]")),
     linear3dWeightOutputs: Array.from(document.querySelectorAll("#linear-3d-weight-grid output")),
+    linear3dWeightHeading: document.getElementById("linear-3d-weights-heading"),
+    linear3dWeightSummary: document.querySelector("#linear-3d-weights-panel .linear3d-weights-heading p"),
+    linear3dWeightFormula: document.getElementById("linear-3d-weight-formula"),
     linear3dWeightCoordinate: document.getElementById("linear-3d-weight-coordinate")
   };
 
@@ -168,6 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let boundaryVertices = [];
   let selectedZ = [0, 0];
   let selectedLinear3dWeights = defaultLinear3dWeights.slice();
+  let selectedQuadratic3dWeights = defaultQuadratic3dWeights.slice();
   let selectedKnapsackZ = defaultKnapsackSelection.slice();
   let selectedKnapsack4dZ = defaultKnapsack4dSelection.slice();
   let generatedSampleSeed = 24591;
@@ -200,6 +221,10 @@ document.addEventListener("DOMContentLoaded", () => {
     key: "",
     cells: []
   };
+  const quadratic3dRiskCache = new Map();
+  const quadratic3dTrueRiskCache = new Map();
+  const quadratic3dSolverContextCache = new Map();
+  const quadratic3dOutcomeOptimumCache = new Map();
 
   tooltipTriggers.forEach((trigger) => {
     const tooltip = trigger.closest(".control-tooltip");
@@ -319,13 +344,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   controls.linear3dWeightInputs.forEach((control, index) => {
     control.dataset.weightIndex = String(index);
-    control.addEventListener("input", handleLinear3dWeightInput);
-    control.addEventListener("change", handleLinear3dWeightInput);
+    control.addEventListener("input", handleTetrahedral3dWeightInput);
+    control.addEventListener("change", handleTetrahedral3dWeightInput);
   });
 
   decisionCanvas.addEventListener("pointerdown", (event) => {
-    if (isTrueLinear3dMode(controls.problemClass.value, visualizationMode)) {
-      selectLinear3dVertexFromEvent(event);
+    if (isTrueTetrahedral3dMode(controls.problemClass.value, visualizationMode)) {
+      selectTetrahedral3dVertexFromEvent(event);
       return;
     }
     if (controls.problemClass.value === problemClasses.binaryKnapsack) {
@@ -534,6 +559,8 @@ document.addEventListener("DOMContentLoaded", () => {
       selectedZ: vertices[0].slice(),
       selectedLinear3dWeights: defaultLinear3dWeights.slice(),
       selectedLinear3dZ: combineTetrahedronWeights(linear3dVertices, defaultLinear3dWeights),
+      selectedQuadratic3dWeights: defaultQuadratic3dWeights.slice(),
+      selectedQuadratic3dZ: deriveQuadratic3dDecision(defaultQuadratic3dWeights),
       selectedKnapsackZ: defaultKnapsackSelection.slice(),
       selectedKnapsack4dZ: defaultKnapsack4dSelection.slice(),
       boundaryVertices: vertices.map((vertex) => vertex.slice()),
@@ -565,6 +592,8 @@ document.addEventListener("DOMContentLoaded", () => {
       selectedZ: source.selectedZ.slice(),
       selectedLinear3dWeights: source.selectedLinear3dWeights.slice(),
       selectedLinear3dZ: deriveLinear3dDecision(source.selectedLinear3dWeights),
+      selectedQuadratic3dWeights: source.selectedQuadratic3dWeights.slice(),
+      selectedQuadratic3dZ: deriveQuadratic3dDecision(source.selectedQuadratic3dWeights),
       selectedKnapsackZ: (source.selectedKnapsackZ || defaultKnapsackSelection).slice(),
       selectedKnapsack4dZ: (source.selectedKnapsack4dZ || defaultKnapsack4dSelection).slice(),
       boundaryVertices: source.boundaryVertices.map((vertex) => vertex.slice()),
@@ -599,6 +628,8 @@ document.addEventListener("DOMContentLoaded", () => {
     tab.selectedZ = selectedZ.slice();
     tab.selectedLinear3dWeights = normalizeLinear3dWeights(selectedLinear3dWeights);
     tab.selectedLinear3dZ = deriveLinear3dDecision(tab.selectedLinear3dWeights);
+    tab.selectedQuadratic3dWeights = normalizeTetrahedronWeights(selectedQuadratic3dWeights, defaultQuadratic3dWeights);
+    tab.selectedQuadratic3dZ = deriveQuadratic3dDecision(tab.selectedQuadratic3dWeights);
     tab.selectedKnapsackZ = selectedKnapsackZ.slice();
     tab.selectedKnapsack4dZ = selectedKnapsack4dZ.slice();
     tab.boundaryVertices = boundaryVertices.map((vertex) => vertex.slice());
@@ -610,7 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tab.sigma = settings ? settings.sigma : Number.parseFloat(controls.sigma.value);
     tab.k = settings ? settings.k : Number.parseInt(controls.k.value, 10);
     tab.epsilon = settings ? settings.epsilon : Number.parseFloat(controls.epsilon.value);
-    tab.mode = isTrueLinear3dMode(tab.problemClass, settings ? settings.visualizationMode : visualizationMode)
+    tab.mode = isMonteCarloOnlyMode(tab.problemClass, settings ? settings.visualizationMode : visualizationMode)
       ? preferredRiskMode
       : (settings ? settings.mode : controls.mode.value);
     tab.preferredRiskMode = preferredRiskMode;
@@ -627,6 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
     invalidateQpCandidateCache();
     selectedZ = tab.selectedZ.slice();
     selectedLinear3dWeights = normalizeLinear3dWeights(tab.selectedLinear3dWeights);
+    selectedQuadratic3dWeights = normalizeTetrahedronWeights(tab.selectedQuadratic3dWeights, defaultQuadratic3dWeights);
     selectedKnapsackZ = normalizeKnapsackSelection(tab.selectedKnapsackZ || defaultKnapsackSelection);
     selectedKnapsack4dZ = normalizeKnapsackSelection(
       tab.selectedKnapsack4dZ || defaultKnapsack4dSelection,
@@ -744,8 +776,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     updateOutputs(settings);
-    if (settings.isLinear3d) {
-      drawLinear3dDecisionSpace(decisionCanvas, settings);
+    if (settings.isTetrahedral3d) {
+      drawTetrahedral3dDecisionSpace(decisionCanvas, settings);
     } else if (settings.problemClass === problemClasses.binaryKnapsack) {
       drawKnapsackDecisionSpace(decisionCanvas, settings.z);
     } else if (settings.problemClass === problemClasses.binaryKnapsack4d) {
@@ -766,36 +798,45 @@ document.addEventListener("DOMContentLoaded", () => {
     const problemClass = normalizeProblemClass(controls.problemClass.value);
     const activeVisualizationMode = normalizeVisualizationMode(visualizationMode, problemClass);
     const isLinear3d = isTrueLinear3dMode(problemClass, activeVisualizationMode);
+    const isQuadratic3d = isTrueQuadratic3dMode(problemClass, activeVisualizationMode);
+    const isTetrahedral3d = isLinear3d || isQuadratic3d;
     if (problemClass === problemClasses.binaryKnapsack) {
       selectedKnapsackZ = normalizeKnapsackSelection(selectedKnapsackZ, problemClass);
     } else if (problemClass === problemClasses.binaryKnapsack4d) {
       selectedKnapsack4dZ = normalizeKnapsackSelection(selectedKnapsack4dZ, problemClass);
     } else if (isLinear3d) {
       selectedLinear3dWeights = normalizeLinear3dWeights(selectedLinear3dWeights);
+    } else if (isQuadratic3d) {
+      selectedQuadratic3dWeights = normalizeTetrahedronWeights(selectedQuadratic3dWeights, defaultQuadratic3dWeights);
     } else {
       selectedZ = projectToFeasibleRegion(selectedZ);
     }
     const q = readActiveQ();
     const knapsackDecisions = isKnapsackProblem(problemClass) ? getKnapsackDecisionCache(problemClass).decisions : [];
-    const activeMode = isLinear3d ? "monte-carlo" : controls.mode.value;
+    const activeMode = isTetrahedral3d ? "monte-carlo" : controls.mode.value;
     visualizationMode = activeVisualizationMode;
     return {
       z: getCurrentDecision(problemClass),
       feasibleVertices: getFeasibleVertices(problemClass, activeVisualizationMode),
       isLinear3d,
+      isQuadratic3d,
+      isTetrahedral3d,
       problemClass,
       rawQ: readRawQ(),
       q,
-      qpCandidates: problemClass === problemClasses.quadratic ? getQpCandidateCache(q).candidates : [],
+      q3d: paperQuadratic3dMatrix.map((row) => row.slice()),
+      qpCandidates: problemClass === problemClasses.quadratic && !isQuadratic3d ? getQpCandidateCache(q).candidates : [],
       knapsackDecisions,
       linear3dWeights: selectedLinear3dWeights.slice(),
+      quadratic3dWeights: selectedQuadratic3dWeights.slice(),
       samplePattern: controls.samplePattern.value,
       sigma: Number.parseFloat(controls.sigma.value),
       k: Number.parseInt(controls.k.value, 10),
       epsilon: Number.parseFloat(controls.epsilon.value),
       mode: activeMode,
       visualizationMode,
-      view3d: { ...view3d }
+      view3d: { ...view3d },
+      generatedSampleSeed
     };
   }
 
@@ -805,12 +846,12 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.sigmaValue.value = settings.sigma.toFixed(2);
     controls.kValue.value = String(settings.k);
     controls.epsilonValue.value = settings.epsilon.toFixed(2);
-    updateQPanelVisibility(settings.problemClass);
+    updateQPanelVisibility(settings.problemClass, settings.visualizationMode);
     updateQStatus(settings.q);
     updateProblemClassMath(settings);
     updateVisualizationAvailability(settings);
     updateModeVisibility(settings);
-    updateLinear3dWeightControls(settings);
+    updateTetrahedral3dWeightControls(settings);
   }
 
   function updateProblemClassMath(settings) {
@@ -822,7 +863,8 @@ document.addEventListener("DOMContentLoaded", () => {
       activeVisualizationMode,
       problemClass === problemClasses.quadratic ? qKey : "",
       problemClass === problemClasses.linear || problemClass === problemClasses.quadratic ? vertexCount : "",
-      settings.isLinear3d ? settings.z.map((value) => value.toFixed(5)).join(",") : ""
+      settings.isTetrahedral3d ? settings.z.map((value) => value.toFixed(5)).join(",") : "",
+      settings.isQuadratic3d ? settings.quadratic3dWeights.map((value) => value.toFixed(5)).join(",") : ""
     ].join("::");
     if (renderedFormulationKey === formulationKey) {
       return;
@@ -837,6 +879,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function buildOptimizationFormulation(settings, vertexCount) {
     const { problemClass, q } = settings;
+    if (settings.isQuadratic3d) {
+      return [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz - y^\\top z\\\\",
+        "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
+        "& y\\in\\mathbb{R}^3,\\quad Q = 0.1\\,I_3",
+        "\\end{aligned}",
+        "\\]",
+        `Here \\(z=(z_1,z_2,z_3)=${formatLatexVector(settings.z)}\\) is selected by barycentric weights \\(\\lambda=${formatLatexVector(settings.quadratic3dWeights)}\\).`,
+        "\\(f_y^\\star\\) is solved by deterministic active-set enumeration over the tetrahedron's vertices, edges, faces, and interior."
+      ].join("\n");
+    }
+
     if (problemClass === problemClasses.quadratic) {
       return [
         "\\[",
@@ -905,12 +961,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getOutcomeSubtitle(problemClass, activeVisualizationMode = visualizationModes.twoD) {
+    if (isTrueQuadratic3dMode(problemClass, activeVisualizationMode)) {
+      return "True 3D outcome samples vs. a voxel approximation of \\(\\pi_{\\epsilon}^{-1}(z)\\).";
+    }
     if (isTrueLinear3dMode(problemClass, activeVisualizationMode)) {
       return "True 3D outcome samples vs. a voxel-slice approximation of \\(\\pi_{\\epsilon}^{-1}(z)\\).";
     }
     if (activeVisualizationMode === visualizationModes.threeD) {
       if (problemClass === problemClasses.quadratic) {
-        return "Educational 3D outcome samples vs. three stacked numerical \\(\\pi_{\\epsilon}^{-1}(z)\\) cross-sections.";
+        return "True 3D outcome samples vs. a voxel approximation of \\(\\pi_{\\epsilon}^{-1}(z)\\).";
       }
       return "3D outcome samples vs. \\(\\pi_{\\epsilon}^{-1}(z)\\).";
     }
@@ -1017,8 +1076,9 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.q12.max = limit.toFixed(4);
   }
 
-  function updateQPanelVisibility(problemClass) {
-    controls.qControls.hidden = problemClass !== problemClasses.quadratic;
+  function updateQPanelVisibility(problemClass, mode = visualizationMode) {
+    controls.qControls.hidden = problemClass !== problemClasses.quadratic
+      || isTrueQuadratic3dMode(problemClass, mode);
   }
 
   function updateModeVisibility(settings) {
@@ -1026,22 +1086,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const is4dKnapsack = settings.problemClass === problemClasses.binaryKnapsack4d;
     const isKnapsack = isKnapsackProblem(settings.problemClass);
     const isLinear3d = settings.isLinear3d;
-    controls.vertexControl.hidden = isKnapsack || isLinear3d;
-    controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic;
-    controls.linear3dWeightsPanel.hidden = !isLinear3d;
-    controls.mode.disabled = isLinear3d;
-    if (!isLinear3d && controls.mode.value !== preferredRiskMode) {
+    const isTetrahedral3d = settings.isTetrahedral3d;
+    controls.vertexControl.hidden = isKnapsack || isTetrahedral3d;
+    controls.qControls.hidden = settings.problemClass !== problemClasses.quadratic || settings.isQuadratic3d;
+    controls.linear3dWeightsPanel.hidden = !isTetrahedral3d;
+    controls.mode.disabled = isTetrahedral3d;
+    if (!isTetrahedral3d && controls.mode.value !== preferredRiskMode) {
       controls.mode.value = preferredRiskMode;
       settings.mode = preferredRiskMode;
     }
-    if (isLinear3d && controls.mode.value !== "monte-carlo") {
+    if (isTetrahedral3d && controls.mode.value !== "monte-carlo") {
       preferredRiskMode = normalizeRiskMode(controls.mode.value);
       controls.mode.value = "monte-carlo";
     }
-    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && !isLinear3d && decisionCanvas.classList.contains("is-dragging"));
-    decisionCanvas.classList.toggle("is-direct-manipulation", !isKnapsack && !isLinear3d && !is4dKnapsack);
+    decisionCanvas.classList.toggle("is-dragging", !isKnapsack && !isTetrahedral3d && decisionCanvas.classList.contains("is-dragging"));
+    decisionCanvas.classList.toggle("is-direct-manipulation", !isKnapsack && !isTetrahedral3d && !is4dKnapsack);
     decisionCanvas.classList.toggle("is-binary-mode", is2dKnapsack);
-    decisionCanvas.classList.toggle("is-vertex-select-mode", isLinear3d);
+    decisionCanvas.classList.toggle("is-vertex-select-mode", isTetrahedral3d);
     decisionCanvas.hidden = is4dKnapsack;
     knapsack4dDecisionUi.hidden = !is4dKnapsack;
     decisionHeading.textContent = "Decision space";
@@ -1049,7 +1110,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ? "\\(z\\) is a 2D binary decision and must be feasible."
       : is4dKnapsack
         ? "\\(z\\) is a 4D binary decision; infeasible item combinations are disabled."
-        : isLinear3d
+        : isTetrahedral3d
           ? "Adjust the decision weights or click a vertex to select \\(z\\)."
           : "Drag \\(z\\) or the boundary vertices.";
     const riskExplainerText = is2dKnapsack
@@ -1058,6 +1119,8 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "The Knapsack (4D–2D) optimum is computed exactly over feasible 4D bitmasks; p-value and e-value modes use finite-decision margins in the 2D outcome space."
       : isLinear3d
           ? "The true 3D LP uses generated samples \\(y=(y_1,y_2,y_3)\\) and exact vertex comparisons over the tetrahedron. Monte Carlo mode is forced because p-value/e-value radii are only implemented for the 2D inverse-region geometry in this demo."
+      : settings.isQuadratic3d
+        ? "The true 3D QP uses generated samples \\(y=(y_1,y_2,y_3)\\), fixed \\(Q=0.1\\,I_3\\), and cached active-set optima over the tetrahedron. Monte Carlo mode is forced because p-value/e-value radii are only implemented for the 2D inverse-region geometry in this demo."
       : settings.visualizationMode === visualizationModes.threeD
         ? make3dRiskExplainer(settings.problemClass)
         : "Educational 2D approximation; not a reproduction of the paper's full guarantees.";
@@ -1071,16 +1134,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function updateLinear3dWeightControls(settings) {
-    if (!settings.isLinear3d) {
+  function updateTetrahedral3dWeightControls(settings) {
+    if (!settings.isTetrahedral3d) {
       return;
     }
-    const weights = normalizeLinear3dWeights(settings.linear3dWeights);
+    const weights = settings.isQuadratic3d
+      ? normalizeTetrahedronWeights(settings.quadratic3dWeights, defaultQuadratic3dWeights)
+      : normalizeLinear3dWeights(settings.linear3dWeights);
     weights.forEach((weight, index) => {
       controls.linear3dWeightInputs[index].value = weight.toFixed(2);
       controls.linear3dWeightOutputs[index].value = weight.toFixed(2);
       controls.linear3dWeightOutputs[index].textContent = weight.toFixed(2);
     });
+    controls.linear3dWeightHeading.textContent = settings.isQuadratic3d ? "Quadratic 3D decision weights" : "Decision weights";
+    controls.linear3dWeightSummary.textContent = settings.isQuadratic3d
+      ? "Independent barycentric weights for the fixed tetrahedral QP."
+      : "Nonnegative barycentric weights sum to one.";
+    controls.linear3dWeightFormula.textContent = "z = λ₁v₁ + λ₂v₂ + λ₃v₃ + λ₄v₄";
     controls.linear3dWeightCoordinate.textContent = `z = ${formatPoint(settings.z)}`;
   }
 
@@ -1111,14 +1181,16 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     controls.visualizationNote.textContent = isLinear3d
       ? "Linear 3D is a true tetrahedral LP with Monte Carlo-only risk."
+      : settings.isQuadratic3d
+        ? "Quadratic 3D is a true tetrahedral QP with fixed Q = 0.1 I3 and Monte Carlo-only risk."
       : supports3d
-        ? "2D is the default. Linear 3D is a true LP; Quadratic 3D is an educational 2D-derived approximation."
-        : "3D is available for Linear and the educational Quadratic view; Knapsack demos remain 2D-only.";
+        ? "2D is the default. Linear 3D is a true LP; Quadratic 3D is a true fixed-Q tetrahedral QP."
+        : "3D is available for Linear and Quadratic; Knapsack demos remain 2D-only.";
   }
 
   function make3dRiskExplainer(problemClass) {
     if (problemClass === problemClasses.quadratic) {
-      return "Educational 3D visualization prototype for the quadratic program; inverse cross-sections use the same numerical candidate approximation as the 2D QP demo and do not reproduce Algorithm 2 or the paper's full guarantees.";
+      return "True 3D QP visualization with active-set objective solves over a fixed tetrahedron and Monte Carlo risk under generated 3D outcomes.";
     }
 
     return "True 3D LP visualization with exact vertex comparisons over a fixed tetrahedron and Monte Carlo risk under generated 3D outcomes.";
@@ -1150,7 +1222,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const settings = typeof settingsOrProblemClass === "string" ? null : settingsOrProblemClass;
     const problemClass = settings ? settings.problemClass : settingsOrProblemClass;
     decisionLegend.replaceChildren();
-    if (settings ? settings.isLinear3d : isTrueLinear3dMode(problemClass)) {
+    if (settings ? settings.isTetrahedral3d : isTrueTetrahedral3dMode(problemClass)) {
       decisionLegend.append(
         makeLegendItem("legend-swatch feasible", "Fixed tetrahedron \\(Z\\subset\\mathbb{R}^3\\)"),
         makeLegendItem("legend-dot selected", "Selected feasible decision \\(z\\)"),
@@ -1247,6 +1319,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${q.q11.toFixed(5)},${q.q12.toFixed(5)},${q.q22.toFixed(5)}`;
   }
 
+  function makeMatrixKey(matrix) {
+    return matrix.map((row) => row.map((value) => value.toFixed(5)).join(",")).join("|");
+  }
+
   function formatControlQValue(value) {
     return formatCompactNumber(value);
   }
@@ -1315,7 +1391,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function generateSamples(settings) {
     const samples = [];
     for (let i = 0; i < settings.k; i += 1) {
-      if (settings.isLinear3d) {
+      if (settings.isTetrahedral3d) {
         const [a, b, c] = generatedSampleTriples[i];
         samples.push(transformSampleTriple(a, b, c, settings.sigma, settings.samplePattern, i));
       } else {
@@ -1381,7 +1457,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function generateResiduals(settings) {
-    if (settings.isLinear3d) {
+    if (settings.isTetrahedral3d) {
       return calibrationPredictionTriples.map((triple, index) => {
         const [a, b, c] = triple;
         const yhat = transformSampleTriple(a, b, c, settings.sigma, settings.samplePattern, index);
@@ -1447,6 +1523,15 @@ document.addEventListener("DOMContentLoaded", () => {
     return quadraticTerm(z, q) + objective(y, z);
   }
 
+  function quadratic3dTerm(z, q = paperQuadratic3dMatrix) {
+    const qz = multiplyMatrixVector(q, z);
+    return 0.5 * dotProduct(z, qz);
+  }
+
+  function quadratic3dObjective(y, z, q = paperQuadratic3dMatrix) {
+    return quadratic3dTerm(z, q) - dotProduct(y, z);
+  }
+
   function isNearOptimal(z, y, epsilon, settingsOrVertices = getFeasibleVertices()) {
     if (Array.isArray(settingsOrVertices)) {
       return isNearOptimalLinear(z, y, epsilon, settingsOrVertices);
@@ -1469,6 +1554,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function isNearOptimalQuadratic(z, y, epsilon, settings) {
+    if (settings.isQuadratic3d) {
+      const optimum = getQuadratic3dOutcomeOptimum(y, settings);
+      return quadratic3dObjective(y, z, settings.q3d || paperQuadratic3dMatrix) <= optimum.value + epsilon + 1e-10;
+    }
+
     const candidates = settings.qpCandidates.length > 0 ? settings.qpCandidates : getQpCandidateCache(settings.q).candidates;
     if (candidates.length === 0) {
       return false;
@@ -1476,6 +1566,166 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const best = approximateQuadraticMinimum(y, candidates);
     return quadraticObjective(y, z, settings.q) <= best + epsilon + 1e-10;
+  }
+
+  function solveTetrahedronQuadraticProgram(y, q = paperQuadratic3dMatrix) {
+    const context = getQuadratic3dSolverContext(q);
+    const h = context.h;
+    const g = linear3dVertices.map((vertex) => dotProduct(vertex, y));
+    let best = null;
+
+    context.supportSystems.forEach((supportSystem) => {
+      const candidate = solveBarycentricSupportSystem(supportSystem, g);
+      if (!candidate) {
+        return;
+      }
+      const value = evaluateBarycentricQuadratic(candidate.lambda, h, g);
+      if (!best || value < best.value - 1e-12) {
+        const z = combineTetrahedronWeights(linear3dVertices, candidate.lambda);
+        best = {
+          lambda: candidate.lambda,
+          z,
+          value,
+          support: supportSystem.support
+        };
+      }
+    });
+
+    if (best) {
+      return best;
+    }
+
+    const fallbackLambda = defaultQuadratic3dWeights.slice();
+    return {
+      lambda: fallbackLambda,
+      z: deriveQuadratic3dDecision(fallbackLambda),
+      value: quadratic3dObjective(y, deriveQuadratic3dDecision(fallbackLambda), q),
+      support: [0, 1, 2, 3]
+    };
+  }
+
+  function getQuadratic3dSolverContext(q = paperQuadratic3dMatrix) {
+    const key = makeQuadratic3dSolverContextKey(q);
+    if (quadratic3dSolverContextCache.has(key)) {
+      return quadratic3dSolverContextCache.get(key);
+    }
+
+    const h = makeTetrahedronQuadraticH(q);
+    const supportSystems = barycentricSupportDefinitions
+      .map((definition) => {
+        const matrix = makeBarycentricSupportMatrix(definition.support, h);
+        const inverse = invertLinearSystemMatrix(matrix);
+        if (!inverse) {
+          return null;
+        }
+        return {
+          mask: definition.mask,
+          support: definition.support,
+          matrix,
+          inverse
+        };
+      })
+      .filter((system) => system !== null);
+    const context = { h, supportSystems };
+    quadratic3dSolverContextCache.set(key, context);
+    return context;
+  }
+
+  function makeQuadratic3dSolverContextKey(q = paperQuadratic3dMatrix) {
+    return [
+      makeMatrixKey(q),
+      linear3dVertices.map((vertex) => vertex.map((value) => value.toPrecision(17)).join(",")).join("|")
+    ].join("::");
+  }
+
+  function makeTetrahedronQuadraticH(q) {
+    return linear3dVertices.map((left) => {
+      return linear3dVertices.map((right) => dotProduct(left, multiplyMatrixVector(q, right)));
+    });
+  }
+
+  function makeBarycentricSupportMatrix(support, h) {
+    const size = support.length;
+    const matrix = [];
+    for (let row = 0; row < size; row += 1) {
+      const vertexRow = support[row];
+      matrix.push([
+        ...support.map((vertexCol) => h[vertexRow][vertexCol]),
+        1
+      ]);
+    }
+    matrix.push([...Array(size).fill(1), 0]);
+    return matrix;
+  }
+
+  function solveBarycentricSupportSystem(supportSystem, g) {
+    const { support, inverse } = supportSystem;
+    const size = support.length;
+    const rhs = [];
+    for (let row = 0; row < size; row += 1) {
+      rhs.push(g[support[row]]);
+    }
+    rhs.push(1);
+
+    const solution = multiplyMatrixVector(inverse, rhs);
+    if (!solution) {
+      return null;
+    }
+
+    const lambda = Array(linear3dVertices.length).fill(0);
+    for (let index = 0; index < size; index += 1) {
+      const weight = solution[index];
+      if (weight < -1e-8 || weight > 1 + 1e-8) {
+        return null;
+      }
+      lambda[support[index]] = Math.max(0, weight);
+    }
+    return { lambda: normalizeTetrahedronWeights(lambda, defaultQuadratic3dWeights) };
+  }
+
+  function getQuadratic3dOutcomeOptimum(y, settingsOrQ = paperQuadratic3dMatrix) {
+    const q = Array.isArray(settingsOrQ)
+      ? settingsOrQ
+      : (settingsOrQ.q3d || paperQuadratic3dMatrix);
+    const key = makeQuadratic3dOutcomeOptimumKey(y, q);
+    if (quadratic3dOutcomeOptimumCache.has(key)) {
+      return quadratic3dOutcomeOptimumCache.get(key);
+    }
+
+    const optimum = solveTetrahedronQuadraticProgram(y, q);
+    rememberCacheValue(quadratic3dOutcomeOptimumCache, key, optimum, 70000);
+    return optimum;
+  }
+
+  function makeQuadratic3dOutcomeOptimumKey(y, q = paperQuadratic3dMatrix) {
+    return [
+      "quadratic",
+      "3d",
+      "outcome-optimum",
+      makeQuadratic3dSolverContextKey(q),
+      y.map((value) => value.toPrecision(17)).join(",")
+    ].join("::");
+  }
+
+  function makeQuadratic3dNearOptimalEvaluator(z, epsilon, settings) {
+    const q = settings.q3d || paperQuadratic3dMatrix;
+    const zQuadraticTerm = quadratic3dTerm(z, q);
+    return (y) => {
+      const optimum = getQuadratic3dOutcomeOptimum(y, q);
+      return zQuadraticTerm - dotProduct(y, z) <= optimum.value + epsilon + 1e-10;
+    };
+  }
+
+  function evaluateBarycentricQuadratic(lambda, h, g) {
+    let quadratic = 0;
+    let linear = 0;
+    for (let row = 0; row < lambda.length; row += 1) {
+      linear += g[row] * lambda[row];
+      for (let col = 0; col < lambda.length; col += 1) {
+        quadratic += lambda[row] * h[row][col] * lambda[col];
+      }
+    }
+    return 0.5 * quadratic - linear;
   }
 
   function isNearOptimalKnapsack(z, y, epsilon, settings) {
@@ -1613,9 +1863,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function estimateRisk(z, samples, residuals, settings) {
+    if (settings.isQuadratic3d) {
+      const key = makeQuadratic3dRiskKey(z, settings);
+      if (quadratic3dRiskCache.has(key)) {
+        return quadratic3dRiskCache.get(key);
+      }
+      const risk = estimateMonteCarloRisk(z, samples, settings);
+      rememberCacheValue(quadratic3dRiskCache, key, risk, 80);
+      return risk;
+    }
+
     const penalties = samples.map((sample) => estimateSampleRisk(z, sample, residuals, settings));
 
     return penalties.reduce((sum, value) => sum + value, 0) / penalties.length;
+  }
+
+  function estimateMonteCarloRisk(z, samples, settings) {
+    if (settings.isQuadratic3d) {
+      const isNearOptimalAt = makeQuadratic3dNearOptimalEvaluator(z, settings.epsilon, settings);
+      const failures = samples.filter((sample) => !isNearOptimalAt(sample)).length;
+      return failures / Math.max(1, samples.length);
+    }
+
+    const failures = samples.filter((sample) => !isNearOptimal(z, sample, settings.epsilon, settings)).length;
+    return failures / Math.max(1, samples.length);
   }
 
   function estimateSampleRisk(z, sample, residuals, settings) {
@@ -1649,20 +1920,75 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function estimateTrueRisk(z, settings) {
+    if (settings.isQuadratic3d) {
+      const key = makeQuadratic3dTrueRiskKey(z, settings);
+      if (quadratic3dTrueRiskCache.has(key)) {
+        return quadratic3dTrueRiskCache.get(key);
+      }
+      const risk = estimateTrueRiskUncached(z, settings);
+      rememberCacheValue(quadratic3dTrueRiskCache, key, risk, 40);
+      return risk;
+    }
+
+    return estimateTrueRiskUncached(z, settings);
+  }
+
+  function estimateTrueRiskUncached(z, settings) {
     let failures = 0;
-    const source = settings.isLinear3d ? trueRiskSampleTriples : trueRiskSamples;
+    const source = settings.isTetrahedral3d ? trueRiskSampleTriples : trueRiskSamples;
+    const isQuadratic3dNearOptimalAt = settings.isQuadratic3d
+      ? makeQuadratic3dNearOptimalEvaluator(z, settings.epsilon, settings)
+      : null;
     source.forEach((normalDraw, index) => {
-      const sample = settings.isLinear3d
+      const sample = settings.isTetrahedral3d
         ? transformSampleTriple(normalDraw[0], normalDraw[1], normalDraw[2], settings.sigma, settings.samplePattern, index)
         : transformSamplePair(normalDraw[0], normalDraw[1], settings.sigma, settings.samplePattern, index);
-      if (!isNearOptimal(z, sample, settings.epsilon, settings)) {
+      const isNearOptimalSample = isQuadratic3dNearOptimalAt
+        ? isQuadratic3dNearOptimalAt(sample)
+        : isNearOptimal(z, sample, settings.epsilon, settings);
+      if (!isNearOptimalSample) {
         failures += 1;
       }
     });
     return failures / source.length;
   }
 
-  function drawLinear3dDecisionSpace(canvas, settings) {
+  function makeQuadratic3dRiskKey(z, settings) {
+    return [
+      "quadratic",
+      "3d",
+      makeMatrixKey(settings.q3d),
+      z.map((value) => value.toFixed(5)).join(","),
+      settings.epsilon.toFixed(5),
+      settings.samplePattern,
+      settings.sigma.toFixed(5),
+      settings.k,
+      settings.generatedSampleSeed
+    ].join("::");
+  }
+
+  function makeQuadratic3dTrueRiskKey(z, settings) {
+    return [
+      "quadratic",
+      "3d",
+      "true-risk",
+      makeMatrixKey(settings.q3d),
+      z.map((value) => value.toFixed(5)).join(","),
+      settings.epsilon.toFixed(5),
+      settings.samplePattern,
+      settings.sigma.toFixed(5)
+    ].join("::");
+  }
+
+  function rememberCacheValue(cache, key, value, maxSize) {
+    if (cache.size >= maxSize) {
+      const firstKey = cache.keys().next().value;
+      cache.delete(firstKey);
+    }
+    cache.set(key, value);
+  }
+
+  function drawTetrahedral3dDecisionSpace(canvas, settings) {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -1677,7 +2003,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return { vertex, index, projected };
     });
     currentDecisionView = {
-      type: "linear-3d-decision",
+      type: "tetrahedral-3d-decision",
       projectedVertices
     };
 
@@ -2018,7 +2344,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearCanvas(ctx, width, height);
     draw3dBox(ctx, projector, extent, zExtent);
-    draw3dInverseCrossSections(ctx, projector, extent, zExtent, settings);
+    if (settings.isQuadratic3d) {
+      draw3dInverseVoxels(ctx, projector, extent, zExtent, settings);
+    } else {
+      draw3dInverseCrossSections(ctx, projector, extent, zExtent, settings);
+    }
     if (settings.isLinear3d) {
       draw3dLinearHalfspaceBoundaryPlanes(ctx, projector, extent, zExtent, settings);
     } else if (settings.problemClass === problemClasses.linear) {
@@ -2204,6 +2534,77 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
+  function draw3dInverseVoxels(ctx, projector, xyExtent, zExtent, settings) {
+    const voxels = get3dInverseVoxelCells(settings, xyExtent, zExtent)
+      .map((voxel) => {
+        const center = projector(voxel.center);
+        return {
+          center,
+          size: voxel.size,
+          depth: center[2]
+        };
+      });
+
+    ctx.save();
+    voxels
+      .sort((a, b) => a.depth - b.depth)
+      .forEach((voxel) => {
+        const pixelSize = clamp(voxel.size * 30, 4.5, 11);
+        ctx.beginPath();
+        ctx.rect(voxel.center[0] - pixelSize / 2, voxel.center[1] - pixelSize / 2, pixelSize, pixelSize);
+        ctx.fillStyle = "rgba(178, 106, 44, 0.075)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(178, 106, 44, 0.22)";
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      });
+    ctx.restore();
+  }
+
+  function get3dInverseVoxelCells(settings, xyExtent, zExtent) {
+    const gridSize = quadratic3dVoxelGridSize;
+    const key = make3dInverseCrossSectionKey(settings, xyExtent, zExtent, gridSize);
+
+    if (inverse3dCellCache.key === key) {
+      return inverse3dCellCache.cells;
+    }
+
+    const cells = [];
+    const xMin = -xyExtent;
+    const yMin = -xyExtent;
+    const zMin = -zExtent;
+    const xStep = (xyExtent * 2) / gridSize;
+    const zStep = (zExtent * 2) / gridSize;
+    const isNearOptimalAt = settings.isQuadratic3d
+      ? makeQuadratic3dNearOptimalEvaluator(settings.z, settings.epsilon, settings)
+      : null;
+
+    for (let ix = 0; ix < gridSize; ix += 1) {
+      for (let iy = 0; iy < gridSize; iy += 1) {
+        for (let iz = 0; iz < gridSize; iz += 1) {
+          const center = [
+            xMin + (ix + 0.5) * xStep,
+            yMin + (iy + 0.5) * xStep,
+            zMin + (iz + 0.5) * zStep
+          ];
+          const isNearOptimalCell = isNearOptimalAt
+            ? isNearOptimalAt(center)
+            : isNearOptimal(settings.z, center, settings.epsilon, settings);
+          if (!isNearOptimalCell) {
+            continue;
+          }
+          cells.push({
+            center,
+            size: Math.min(xStep, zStep)
+          });
+        }
+      }
+    }
+
+    inverse3dCellCache = { key, cells };
+    return cells;
+  }
+
   function get3dInverseCrossSectionCells(settings, xyExtent, zExtent) {
     const gridSize = 18;
     const key = make3dInverseCrossSectionKey(settings, xyExtent, zExtent, gridSize);
@@ -2251,7 +2652,8 @@ document.addEventListener("DOMContentLoaded", () => {
       settings.epsilon.toFixed(5),
       settings.z.map((value) => value.toFixed(5)).join(","),
       settings.feasibleVertices.map((vertex) => vertex.map((value) => value.toFixed(5)).join(",")).join("|"),
-      settings.problemClass === problemClasses.quadratic ? makeQKey(settings.q) : "",
+      settings.isQuadratic3d ? makeMatrixKey(settings.q3d) : "",
+      settings.problemClass === problemClasses.quadratic && !settings.isQuadratic3d ? makeQKey(settings.q) : "",
       settings.problemClass === problemClasses.quadratic ? qpInteriorGridSize : "",
       settings.samplePattern,
       settings.sigma.toFixed(5),
@@ -2328,15 +2730,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function draw3dSamples(ctx, projector, samples, settings) {
+    const isQuadratic3dNearOptimalAt = settings.isQuadratic3d
+      ? makeQuadratic3dNearOptimalEvaluator(settings.z, settings.epsilon, settings)
+      : null;
     const projectedSamples = samples.map((sample, index) => {
-      const sample3d = settings.isLinear3d
+      const sample3d = settings.isTetrahedral3d
         ? sample
         : makeOutcomeSample3d(sample, index, settings);
       const projected = projector(sample3d);
       return {
         sample,
         projected,
-        inside: isNearOptimal(settings.z, sample, settings.epsilon, settings)
+        inside: isQuadratic3dNearOptimalAt
+          ? isQuadratic3dNearOptimalAt(sample)
+          : isNearOptimal(settings.z, sample, settings.epsilon, settings)
       };
     });
 
@@ -2696,6 +3103,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     tab.selectedLinear3dWeights = migrateLinear3dWeights(tab);
     tab.selectedLinear3dZ = deriveLinear3dDecision(tab.selectedLinear3dWeights);
+    tab.selectedQuadratic3dWeights = migrateQuadratic3dWeights(tab);
+    tab.selectedQuadratic3dZ = deriveQuadratic3dDecision(tab.selectedQuadratic3dWeights);
     tab.selectedZ = Array.isArray(tab.selectedZ) && tab.selectedZ.length >= 2 ? tab.selectedZ.slice(0, 2) : defaultVertices[0].slice();
     tab.mode = normalizeRiskMode(tab.mode || "monte-carlo");
     tab.preferredRiskMode = normalizeRiskMode(tab.preferredRiskMode || tab.mode);
@@ -2716,6 +3125,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeProblemClass(problemClass) === problemClasses.linear && mode === visualizationModes.threeD;
   }
 
+  function isTrueQuadratic3dMode(problemClass = controls.problemClass.value, mode = visualizationMode) {
+    return normalizeProblemClass(problemClass) === problemClasses.quadratic && mode === visualizationModes.threeD;
+  }
+
+  function isTrueTetrahedral3dMode(problemClass = controls.problemClass.value, mode = visualizationMode) {
+    return isTrueLinear3dMode(problemClass, mode) || isTrueQuadratic3dMode(problemClass, mode);
+  }
+
+  function isMonteCarloOnlyMode(problemClass = controls.problemClass.value, mode = visualizationMode) {
+    return isTrueTetrahedral3dMode(problemClass, mode);
+  }
+
   function migrateLinear3dWeights(tab) {
     const storedWeights = normalizeLinear3dWeightsIfValid(tab.selectedLinear3dWeights);
     if (storedWeights) {
@@ -2733,7 +3154,28 @@ document.addEventListener("DOMContentLoaded", () => {
     return makeLinear3dOneHotWeights(tab.selectedLinear3dVertexIndex);
   }
 
+  function migrateQuadratic3dWeights(tab) {
+    const storedWeights = normalizeTetrahedronWeightsIfValid(tab.selectedQuadratic3dWeights, defaultQuadratic3dWeights);
+    if (storedWeights) {
+      return storedWeights;
+    }
+
+    const storedQuadratic3dPoint = Array.isArray(tab.selectedQuadratic3dZ) && tab.selectedQuadratic3dZ.length >= 3
+      ? tab.selectedQuadratic3dZ
+      : null;
+    const pointWeights = linear3dPointToWeights(storedQuadratic3dPoint);
+    if (pointWeights) {
+      return pointWeights;
+    }
+
+    return defaultQuadratic3dWeights.slice();
+  }
+
   function normalizeLinear3dWeightsIfValid(weights) {
+    return normalizeTetrahedronWeightsIfValid(weights, defaultLinear3dWeights);
+  }
+
+  function normalizeTetrahedronWeightsIfValid(weights, fallback = defaultLinear3dWeights) {
     if (!Array.isArray(weights) || weights.length < linear3dVertices.length) {
       return null;
     }
@@ -2741,10 +3183,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!raw.every(Number.isFinite) || raw.some((weight) => weight < -1e-6)) {
       return null;
     }
-    return normalizeLinear3dWeights(raw);
+    return normalizeTetrahedronWeights(raw, fallback);
   }
 
   function normalizeLinear3dWeights(weights, fallback = defaultLinear3dWeights) {
+    return normalizeTetrahedronWeights(weights, fallback);
+  }
+
+  function normalizeTetrahedronWeights(weights, fallback = defaultLinear3dWeights) {
     const raw = Array.isArray(weights) && weights.length >= linear3dVertices.length
       ? weights.slice(0, linear3dVertices.length)
       : fallback.slice();
@@ -2795,6 +3241,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return combineTetrahedronWeights(linear3dVertices, normalizeLinear3dWeights(weights));
   }
 
+  function deriveQuadratic3dDecision(weights) {
+    return combineTetrahedronWeights(linear3dVertices, normalizeTetrahedronWeights(weights, defaultQuadratic3dWeights));
+  }
+
   function combineTetrahedronWeights(vertices, weights) {
     return vertices[0].map((_, coordIndex) => {
       return vertices.reduce((sum, vertex, vertexIndex) => {
@@ -2806,6 +3256,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function getCurrentDecision(problemClass) {
     if (isTrueLinear3dMode(problemClass, visualizationMode)) {
       return deriveLinear3dDecision(selectedLinear3dWeights);
+    }
+    if (isTrueQuadratic3dMode(problemClass, visualizationMode)) {
+      return deriveQuadratic3dDecision(selectedQuadratic3dWeights);
     }
     if (problemClass === problemClasses.binaryKnapsack) {
       return selectedKnapsackZ.slice();
@@ -2819,6 +3272,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function getCurrentDecisionLabel(settings) {
     if (settings.isLinear3d) {
       return `Selected 3D LP decision: z = ${formatPoint(settings.z)}`;
+    }
+    if (settings.isQuadratic3d) {
+      return `Selected 3D QP decision: z = ${formatPoint(settings.z)}`;
     }
     if (isKnapsackProblem(settings.problemClass)) {
       return `Selected ${getKnapsackConfig(settings.problemClass).dimension}D binary decision: z = ${formatBinaryVector(settings.z)}`;
@@ -2943,8 +3399,8 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
   }
 
-  function selectLinear3dVertexFromEvent(event) {
-    if (!currentDecisionView || currentDecisionView.type !== "linear-3d-decision") {
+  function selectTetrahedral3dVertexFromEvent(event) {
+    if (!currentDecisionView || currentDecisionView.type !== "tetrahedral-3d-decision") {
       return;
     }
 
@@ -2957,21 +3413,29 @@ document.addEventListener("DOMContentLoaded", () => {
       .sort((a, b) => a.distance - b.distance)[0];
 
     if (nearestVertex && nearestVertex.distance <= 18) {
-      selectedLinear3dWeights = makeLinear3dOneHotWeights(nearestVertex.index);
+      if (isTrueQuadratic3dMode(controls.problemClass.value, visualizationMode)) {
+        selectedQuadratic3dWeights = makeLinear3dOneHotWeights(nearestVertex.index);
+      } else {
+        selectedLinear3dWeights = makeLinear3dOneHotWeights(nearestVertex.index);
+      }
       clearSampleSelection();
       scheduleRender();
       event.preventDefault();
     }
   }
 
-  function handleLinear3dWeightInput(event) {
+  function handleTetrahedral3dWeightInput(event) {
     const weightIndex = Number.parseInt(event.currentTarget.dataset.weightIndex, 10);
     const target = Number.parseFloat(event.currentTarget.value);
     if (!Number.isInteger(weightIndex) || !Number.isFinite(target)) {
       return;
     }
 
-    selectedLinear3dWeights = updateLinear3dWeight(selectedLinear3dWeights, weightIndex, target);
+    if (isTrueQuadratic3dMode(controls.problemClass.value, visualizationMode)) {
+      selectedQuadratic3dWeights = updateLinear3dWeight(selectedQuadratic3dWeights, weightIndex, target);
+    } else {
+      selectedLinear3dWeights = updateLinear3dWeight(selectedLinear3dWeights, weightIndex, target);
+    }
     clearSampleSelection();
     scheduleRender();
   }
@@ -3051,7 +3515,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleModeChange() {
-    if (!isTrueLinear3dMode(controls.problemClass.value, visualizationMode)) {
+    if (!isMonteCarloOnlyMode(controls.problemClass.value, visualizationMode)) {
       preferredRiskMode = normalizeRiskMode(controls.mode.value);
     }
     if (!isConformalRadiusMode(controls.mode.value)) {
@@ -3061,9 +3525,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleVisualizationModeChange() {
-    const previousLinear3d = isTrueLinear3dMode(controls.problemClass.value, visualizationMode);
+    const previousMonteCarloOnly = isMonteCarloOnlyMode(controls.problemClass.value, visualizationMode);
     visualizationMode = normalizeVisualizationMode(getSelectedVisualizationMode(), controls.problemClass.value);
-    if (previousLinear3d && !isTrueLinear3dMode(controls.problemClass.value, visualizationMode)) {
+    if (previousMonteCarloOnly && !isMonteCarloOnlyMode(controls.problemClass.value, visualizationMode)) {
       controls.mode.value = preferredRiskMode;
     }
     syncVisualizationInputs();
@@ -3164,7 +3628,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getFeasibleVertices(problemClass = controls.problemClass.value, mode = visualizationMode) {
-    if (isTrueLinear3dMode(problemClass, mode)) {
+    if (isTrueTetrahedral3dMode(problemClass, mode)) {
       return linear3dVertices.map((vertex) => vertex.slice());
     }
     return boundaryVertices.map((vertex) => vertex.slice());
@@ -3798,6 +4262,61 @@ document.addEventListener("DOMContentLoaded", () => {
       sum += a[index] * b[index];
     }
     return sum;
+  }
+
+  function multiplyMatrixVector(matrix, vector) {
+    return matrix.map((row) => dotProduct(row, vector));
+  }
+
+  function invertLinearSystemMatrix(matrix) {
+    const n = matrix.length;
+    const columns = [];
+    for (let col = 0; col < n; col += 1) {
+      const rhs = Array(n).fill(0);
+      rhs[col] = 1;
+      const solution = solveLinearSystem(matrix, rhs);
+      if (!solution) {
+        return null;
+      }
+      columns.push(solution);
+    }
+
+    return Array.from({ length: n }, (_, row) => columns.map((column) => column[row]));
+  }
+
+  function solveLinearSystem(matrix, rhs) {
+    const n = rhs.length;
+    const a = matrix.map((row, index) => [...row, rhs[index]]);
+
+    for (let col = 0; col < n; col += 1) {
+      let pivot = col;
+      for (let row = col + 1; row < n; row += 1) {
+        if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) {
+          pivot = row;
+        }
+      }
+      if (Math.abs(a[pivot][col]) < 1e-12) {
+        return null;
+      }
+      if (pivot !== col) {
+        [a[col], a[pivot]] = [a[pivot], a[col]];
+      }
+      const pivotValue = a[col][col];
+      for (let entry = col; entry <= n; entry += 1) {
+        a[col][entry] /= pivotValue;
+      }
+      for (let row = 0; row < n; row += 1) {
+        if (row === col) {
+          continue;
+        }
+        const factor = a[row][col];
+        for (let entry = col; entry <= n; entry += 1) {
+          a[row][entry] -= factor * a[col][entry];
+        }
+      }
+    }
+
+    return a.map((row) => row[n]);
   }
 
   function vectorNorm(vector) {
