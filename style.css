@@ -882,7 +882,7 @@ h3 {
 }
 
 #decision-canvas {
-  cursor: grab;
+  cursor: default;
   touch-action: none;
 }
 
@@ -894,8 +894,92 @@ h3 {
   cursor: pointer;
 }
 
-#decision-canvas.is-dragging {
+#decision-canvas.is-vertex-select-mode {
+  cursor: pointer;
+}
+
+#decision-canvas.is-direct-manipulation {
+  cursor: grab;
+}
+
+#decision-canvas.is-direct-manipulation.is-dragging {
   cursor: grabbing;
+}
+
+.linear3d-weights {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 300px);
+  margin: 7px auto 0;
+  padding: 8px;
+  border: 1px solid rgba(40, 92, 77, 0.18);
+  border-radius: 6px;
+  background: rgba(238, 243, 239, 0.5);
+  color: var(--muted);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.linear3d-weights[hidden] {
+  display: none;
+}
+
+.linear3d-weights-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.linear3d-weights-heading h4 {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 0.76rem;
+  line-height: 1.15;
+}
+
+.linear3d-weights-heading p,
+.linear3d-weight-formula,
+.linear3d-weight-coordinate {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.linear3d-weight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+
+.linear3d-weight-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 2px 5px;
+  align-items: center;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.linear3d-weight-control span {
+  grid-column: 1 / -1;
+}
+
+.linear3d-weight-control input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.linear3d-weight-control output {
+  min-width: 3.1ch;
+  color: #8b4d1e;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.linear3d-weight-coordinate {
+  color: #8b4d1e;
+  font-weight: 700;
 }
 
 .knapsack4d-ui {
@@ -1472,6 +1556,10 @@ h3 {
   }
 
   .control-group {
+    grid-template-columns: 1fr;
+  }
+
+  .linear3d-weight-grid {
     grid-template-columns: 1fr;
   }
 
