@@ -1668,7 +1668,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const height = canvas.height;
     const plot = makeSquarePlot(width, height, { left: 34, right: 28, top: 22, bottom: 32 });
     const bounds = { xMin: -0.08, xMax: 1.08, yMin: -0.08, yMax: 1.08, zMin: -0.08, zMax: 1.08 };
-    const projector = makeBoxProjector3d(plot, bounds, settings.view3d);
+    const projector = makeBoxProjector3d(plot, bounds, settings.view3d, {
+      scaleDivisor: 2.74,
+      centerYOffset: 8
+    });
     const projectedVertices = settings.feasibleVertices.map((vertex, index) => {
       const projected = projector(vertex);
       return { vertex, index, projected };
@@ -2006,7 +2009,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const extent = Math.max(1.15, settings.sigma * sigmaScale * 2.2 + 0.55);
     const zExtent = extent * 0.82;
     const plot = makeSquarePlot(width, height, { left: 34, right: 28, top: 22, bottom: 32 });
-    const projector = makeProjector3d(plot, extent, zExtent, settings.view3d);
+    const projector = makeProjector3d(plot, extent, zExtent, settings.view3d, {
+      scaleDivisor: 2.78,
+      centerYOffset: 8
+    });
 
     currentOutcomeView = null;
 
@@ -2023,10 +2029,11 @@ document.addEventListener("DOMContentLoaded", () => {
     draw3dInteractionHint(ctx, plot);
   }
 
-  function makeProjector3d(plot, xyExtent, zExtent, view) {
+  function makeProjector3d(plot, xyExtent, zExtent, view, options = {}) {
     const centerX = (plot.left + plot.right) / 2;
-    const centerY = (plot.top + plot.bottom) / 2 + 8;
-    const scale = Math.min(plot.right - plot.left, plot.bottom - plot.top) / (2.8 * xyExtent);
+    const centerY = (plot.top + plot.bottom) / 2 + (options.centerYOffset ?? 8);
+    const scaleDivisor = options.scaleDivisor ?? 2.8;
+    const scale = Math.min(plot.right - plot.left, plot.bottom - plot.top) / (scaleDivisor * xyExtent);
     const yaw = view.yaw;
     const pitch = view.pitch;
     const cosYaw = Math.cos(yaw);
@@ -2049,7 +2056,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function makeBoxProjector3d(plot, bounds, view) {
+  function makeBoxProjector3d(plot, bounds, view, options = {}) {
     const center = [
       (bounds.xMin + bounds.xMax) / 2,
       (bounds.yMin + bounds.yMax) / 2,
@@ -2061,7 +2068,7 @@ document.addEventListener("DOMContentLoaded", () => {
       bounds.zMax - bounds.zMin,
       1e-9
     );
-    const projector = makeProjector3d(plot, span / 2, span / 2, view);
+    const projector = makeProjector3d(plot, span / 2, span / 2, view, options);
     return (point) => projector([
       point[0] - center[0],
       point[1] - center[1],
@@ -2354,7 +2361,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillStyle = "rgba(93, 107, 100, 0.9)";
     ctx.font = "11px Arial, Helvetica, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(text, plot.left, plot.bottom + 24);
+    ctx.fillText(text, plot.left, Math.min(plot.bottom + 18, ctx.canvas.height - 18));
     ctx.restore();
   }
 
