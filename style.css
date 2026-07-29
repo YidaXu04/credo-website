@@ -1102,8 +1102,12 @@ h3 {
   flex-wrap: wrap;
   gap: 4px 8px;
   align-items: center;
-  margin-top: auto;
+  margin-top: 0;
   padding-top: 6px;
+}
+
+#decision-legend {
+  margin-top: auto;
 }
 
 #decision-legend[hidden] {
@@ -1319,7 +1323,7 @@ h3 {
 }
 
 .risk-explainer {
-  margin-top: auto;
+  margin-top: 2px;
   max-width: 680px;
 }
 
