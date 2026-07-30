@@ -871,93 +871,149 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     renderedFormulationKey = formulationKey;
 
-    controls.formulationBody.textContent = buildOptimizationFormulation(settings, vertexCount);
+    renderOptimizationFormulation(settings, vertexCount);
     outcomeSubtitle.textContent = getOutcomeSubtitle(problemClass, activeVisualizationMode);
 
     typesetDynamicMath([controls.formulationBody, outcomeSubtitle]);
   }
 
+  function renderOptimizationFormulation(settings, vertexCount) {
+    const formulation = buildOptimizationFormulation(settings, vertexCount);
+    controls.formulationBody.classList.toggle("formulation-body--stable-summary", Boolean(formulation.summary));
+
+    if (!formulation.summary) {
+      controls.formulationBody.textContent = formulation.text;
+      return;
+    }
+
+    const summary = document.createElement("div");
+    summary.className = "formulation-summary formulation-summary--3d";
+
+    const valueRow = document.createElement("div");
+    valueRow.className = "formulation-summary-row formulation-summary-values";
+    formulation.summary.values.forEach((item) => {
+      const value = document.createElement("span");
+      value.className = "formulation-summary-value";
+      value.append(document.createTextNode(`current ${item.label} = `));
+
+      const number = document.createElement("span");
+      number.className = "formulation-summary-number";
+      number.textContent = item.value;
+      value.append(number);
+      valueRow.append(value);
+    });
+
+    const explanationRow = document.createElement("div");
+    explanationRow.className = "formulation-summary-row formulation-summary-explanation";
+    explanationRow.textContent = formulation.summary.explanation;
+
+    summary.append(valueRow, explanationRow);
+    controls.formulationBody.replaceChildren(document.createTextNode(formulation.text), summary);
+  }
+
   function buildOptimizationFormulation(settings, vertexCount) {
     const { problemClass, q } = settings;
     if (settings.isQuadratic3d) {
-      return [
-        "\\[",
-        "\\begin{aligned}",
-        "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz - y^\\top z\\\\",
-        "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
-        "& y\\in\\mathbb{R}^3,\\quad Q = 0.1\\,I_3",
-        "\\end{aligned}",
-        "\\]",
-        `Here \\(z=(z_1,z_2,z_3)=${formatLatexVector(settings.z)}\\) is selected by barycentric weights \\(\\lambda=${formatLatexVector(settings.quadratic3dWeights)}\\).`,
-        "\\(f_y^\\star\\) is solved by deterministic active-set enumeration over the tetrahedron's vertices, edges, faces, and interior."
-      ].join("\n");
+      return {
+        text: [
+          "\\[",
+          "\\begin{aligned}",
+          "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz - y^\\top z\\\\",
+          "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
+          "& y\\in\\mathbb{R}^3,\\quad Q = 0.1\\,I_3",
+          "\\end{aligned}",
+          "\\]"
+        ].join("\n"),
+        summary: {
+          values: [
+            { label: "z", value: formatFixedVector(settings.z) },
+            { label: "λ", value: formatFixedVector(normalizeTetrahedronWeights(settings.quadratic3dWeights, defaultQuadratic3dWeights)) }
+          ],
+          explanation: "\\(f_y^\\star\\) is solved by deterministic active-set enumeration over the tetrahedron's vertices, edges, faces, and interior."
+        }
+      };
     }
 
     if (problemClass === problemClasses.quadratic) {
-      return [
-        "\\[",
-        "\\begin{aligned}",
-        "\\underset{z}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz + y^\\top z\\\\",
-        `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}\\\\`,
-        `\\text{with}\\quad & Q = \\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}`,
-        "\\end{aligned}",
-        "\\]",
-        `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). Inverse region and inner-ball distance are numerically approximated.`
-      ].join("\n");
+      return {
+        text: [
+          "\\[",
+          "\\begin{aligned}",
+          "\\underset{z}{\\operatorname{minimize}}\\quad & \\frac{1}{2}z^\\top Qz + y^\\top z\\\\",
+          `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}\\\\`,
+          `\\text{with}\\quad & Q = \\begin{bmatrix}${formatQValue(q.q11)} & ${formatQValue(q.q12)}\\\\${formatQValue(q.q12)} & ${formatQValue(q.q22)}\\end{bmatrix}`,
+          "\\end{aligned}",
+          "\\]",
+          `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). Inverse region and inner-ball distance are numerically approximated.`
+        ].join("\n")
+      };
     }
 
     if (problemClass === problemClasses.binaryKnapsack) {
-      return [
-        "\\[",
-        "\\begin{aligned}",
-        "\\underset{z\\in\\{0,1\\}^2}{\\operatorname{maximize}}\\quad & y^\\top z\\\\",
-        `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsackWeights, knapsackCapacity)}\\\\`,
-        "& y\\in\\mathbb{R}^2",
-        "\\end{aligned}",
-        "\\]",
-        "Feasible 2D binary decisions are enumerated exactly."
-      ].join("\n");
+      return {
+        text: [
+          "\\[",
+          "\\begin{aligned}",
+          "\\underset{z\\in\\{0,1\\}^2}{\\operatorname{maximize}}\\quad & y^\\top z\\\\",
+          `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsackWeights, knapsackCapacity)}\\\\`,
+          "& y\\in\\mathbb{R}^2",
+          "\\end{aligned}",
+          "\\]",
+          "Feasible 2D binary decisions are enumerated exactly."
+        ].join("\n")
+      };
     }
 
     if (problemClass === problemClasses.binaryKnapsack4d) {
       const itemFunctions = knapsack4dItemValues
         .map((_, index) => `\\(${makeKnapsack4dItemFormula(index, ["y_1", "y_2"], true)}\\)`)
         .join("; ");
-      return [
-        "\\[",
-        "\\begin{aligned}",
-        "\\underset{z\\in\\{0,1\\}^4}{\\operatorname{maximize}}\\quad & \\sum_{i=1}^{4} z_i v_i(y)\\\\",
-        `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsack4dWeights, knapsack4dCapacity)}\\\\`,
-        "& y\\in\\mathbb{R}^2",
-        "\\end{aligned}",
-        "\\]",
-        `Item values: ${itemFunctions}. Feasible 4D decisions are enumerated exactly by bitmask.`
-      ].join("\n");
+      return {
+        text: [
+          "\\[",
+          "\\begin{aligned}",
+          "\\underset{z\\in\\{0,1\\}^4}{\\operatorname{maximize}}\\quad & \\sum_{i=1}^{4} z_i v_i(y)\\\\",
+          `\\text{subject to}\\quad & ${formatKnapsackCapacityConstraint(knapsack4dWeights, knapsack4dCapacity)}\\\\`,
+          "& y\\in\\mathbb{R}^2",
+          "\\end{aligned}",
+          "\\]",
+          `Item values: ${itemFunctions}. Feasible 4D decisions are enumerated exactly by bitmask.`
+        ].join("\n")
+      };
     }
 
     if (settings.isLinear3d) {
-      return [
-        "\\[",
-        "\\begin{aligned}",
-        "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
-        "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
-        "& y\\in\\mathbb{R}^3",
-        "\\end{aligned}",
-        "\\]",
-        `Here \\(z=(z_1,z_2,z_3)=${formatLatexVector(settings.z)}\\), \\(y=(y_1,y_2,y_3)\\), and \\(z\\) is a general feasible point in the tetrahedron.`,
-        `\\(z\\) is \\(\\epsilon\\)-near-optimal when \\(y^\\top z \\leq \\min_{v\\in V} y^\\top v + \\epsilon\\), equivalently \\(y^\\top(z-v_j)\\leq\\epsilon\\) for each tetrahedron vertex \\(v_j\\).`
-      ].join("\n");
+      return {
+        text: [
+          "\\[",
+          "\\begin{aligned}",
+          "\\underset{z\\in\\mathbb{R}^3}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
+          "\\text{subject to}\\quad & z \\in Z = \\operatorname{conv}\\{v_1,v_2,v_3,v_4\\}\\\\",
+          "& y\\in\\mathbb{R}^3",
+          "\\end{aligned}",
+          "\\]"
+        ].join("\n"),
+        summary: {
+          values: [
+            { label: "z", value: formatFixedVector(settings.z) },
+            { label: "λ", value: formatFixedVector(normalizeLinear3dWeights(settings.linear3dWeights)) }
+          ],
+          explanation: "\\(z\\) is \\(\\epsilon\\)-near-optimal when \\(y^\\top z \\leq \\min_{v\\in V} y^\\top v + \\epsilon\\), equivalently \\(y^\\top(z-v_j)\\leq\\epsilon\\) for each tetrahedron vertex \\(v_j\\)."
+        }
+      };
     }
 
-    return [
-      "\\[",
-      "\\begin{aligned}",
-      "\\underset{z}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
-      `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}`,
-      "\\end{aligned}",
-      "\\]",
-      `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). The inverse geometry is shown with exact halfspace-style boundaries in this simplified LP demo.`
-    ].join("\n");
+    return {
+      text: [
+        "\\[",
+        "\\begin{aligned}",
+        "\\underset{z}{\\operatorname{minimize}}\\quad & y^\\top z\\\\",
+        `\\text{subject to}\\quad & z \\in Z = ${formatVertexConvexHull(vertexCount)}`,
+        "\\end{aligned}",
+        "\\]",
+        `Editable boundary vertices define the feasible polytope \\(Z\\); here \\(m=${vertexCount}\\). The inverse geometry is shown with exact halfspace-style boundaries in this simplified LP demo.`
+      ].join("\n")
+    };
   }
 
   function getOutcomeSubtitle(problemClass, activeVisualizationMode = visualizationModes.twoD) {
@@ -4173,8 +4229,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return `(${point.map((value) => value.toFixed(2)).join(", ")})`;
   }
 
-  function formatLatexVector(point) {
-    return `(${point.map((value) => formatCompactNumber(value)).join(",")})`;
+  function formatFixedVector(point, precision = 2) {
+    return `(${point.map((value) => formatFixedDecimal(value, precision)).join(", ")})`;
+  }
+
+  function formatFixedDecimal(value, precision = 2) {
+    const zeroThreshold = 0.5 * (10 ** -precision);
+    return (Math.abs(value) < zeroThreshold ? 0 : value).toFixed(precision);
   }
 
   function formatBinaryVector(vector) {

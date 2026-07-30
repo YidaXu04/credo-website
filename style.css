@@ -725,6 +725,44 @@ h3 {
   line-height: 1.2;
 }
 
+.formulation-body--stable-summary {
+  display: grid;
+  gap: 2px;
+}
+
+.formulation-summary {
+  display: grid;
+  gap: 2px;
+  min-height: calc(2 * 1.2em + 2px);
+  line-height: 1.2;
+}
+
+.formulation-summary-row {
+  min-width: 0;
+}
+
+.formulation-summary-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  align-items: baseline;
+}
+
+.formulation-summary-value {
+  white-space: nowrap;
+}
+
+.formulation-summary-number {
+  display: inline-block;
+  min-width: 16.5ch;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.formulation-summary-values .formulation-summary-value:nth-child(2) .formulation-summary-number {
+  min-width: 23.5ch;
+}
+
 .formulation-body mjx-container[jax="CHTML"][display="true"] {
   margin: 0.08em 0 0.14em;
   overflow-x: auto;
