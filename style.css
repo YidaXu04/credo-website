@@ -1421,6 +1421,24 @@ h3 {
   margin: 0;
 }
 
+.footer-credit {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.footer-credit a {
+  color: var(--accent-dark);
+  text-decoration-color: rgba(23, 60, 52, 0.42);
+  text-underline-offset: 3px;
+}
+
+.footer-credit a:hover,
+.footer-credit a:focus {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
 @media (max-width: 1080px) {
   .demo-controls {
     grid-template-columns: 1fr;
